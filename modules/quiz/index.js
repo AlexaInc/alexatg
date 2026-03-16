@@ -4,8 +4,8 @@ module.exports = function (bot, db) {
   const QUIZ_URL = "https://raw.githubusercontent.com/hansaka02/questionjson/refs/heads/main/quiz.json";
   const quizSessions = {};
 
-  const CustomQuizModel = db.getCustomQuizModel();
-  const UserQuizScoreModel = db.getUserQuizScoreModel();
+  const getCustomQuizModel = () => db.getCustomQuizModel();
+  const getUserQuizScoreModel = () => db.getUserQuizScoreModel();
 
   async function startQuiz(chatId, customQuizData = null) {
     if (quizSessions[chatId] && quizSessions[chatId].active) {
@@ -119,7 +119,7 @@ module.exports = function (bot, db) {
         // Save scores to DB
         for (const u of sorted) {
           try {
-            await UserQuizScoreModel.updateOne(
+            await getUserQuizScoreModel().updateOne(
               { groupId: chatId, userId: u.id },
               { $inc: { score: u.score }, firstName: u.name, username: u.username },
               { upsert: true }
@@ -182,7 +182,7 @@ module.exports = function (bot, db) {
   bot.onText(/^\/qlead/, async (msg) => {
     const chatId = msg.chat.id;
     try {
-      const topUsers = await UserQuizScoreModel.find({ groupId: chatId }).sort({ score: -1 }).limit(10);
+      const topUsers = await getUserQuizScoreModel().find({ groupId: chatId }).sort({ score: -1 }).limit(10);
       let text = "🏆 **Quiz Leaderboard - Group** 🏆\n\n";
       if (!topUsers.length) text += "No scores yet.";
       else topUsers.forEach((u, i) => text += `${i + 1}. [${u.firstName}](tg://user?id=${u.userId}) — ${u.score} pts\n`);
@@ -209,10 +209,10 @@ module.exports = function (bot, db) {
       let topUsers;
       let title;
       if (data.includes('group')) {
-        topUsers = await UserQuizScoreModel.find({ groupId: chatId }).sort({ score: -1 }).limit(10);
+        topUsers = await getUserQuizScoreModel().find({ groupId: chatId }).sort({ score: -1 }).limit(10);
         title = "Group";
       } else {
-        topUsers = await UserQuizScoreModel.aggregate([
+        topUsers = await getUserQuizScoreModel().aggregate([
           { $group: { _id: "$userId", totalScore: { $sum: "$score" }, firstName: { $first: "$firstName" } } },
           { $sort: { totalScore: -1 } },
           { $limit: 10 }

@@ -21,8 +21,8 @@ module.exports = function (bot, deps) {
 
         if (quizId) {
             // Fetch custom quiz from DB
-            const CustomQuizModel = deps.db.getCustomQuizModel();
-            const quizData = await CustomQuizModel.findOne({ quizId: quizId.toUpperCase() });
+            if (!deps.CustomQuizModel) return bot.sendMessage(chatId, "❌ Custom quizzes are not available (DB not connected).");
+            const quizData = await deps.CustomQuizModel.findOne({ quizId: quizId.toUpperCase() });
             if (!quizData) return bot.sendMessage(chatId, "❌ Quiz ID not found.");
             deps.quiz.startQuiz(chatId, quizData);
         } else {

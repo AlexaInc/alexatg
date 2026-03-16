@@ -717,19 +717,172 @@ module.exports = function (bot, deps) {
   bot.onText(/^\/promme/, async (msg) => {
     if (!botOWNER_IDS.includes(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Bot owner only.");
     const chatId = msg.chat.id;
+    const command = '/promme';
+    const fullText = msg.text || ' ';
+    const argsText = fullText.substring(command.length).trim() + ' full';
+    const args = argsText.toLowerCase().split(/\s+/).filter(Boolean);
+
     try {
-      const perks = {
-        can_change_info: true, can_delete_messages: true, can_invite_users: true,
-        can_restrict_members: true, can_pin_messages: true, can_promote_members: true,
-        can_manage_video_chats: true, is_anonymous: msg.text.includes('anno')
+      const me = await bot.getMe();
+      const botMember = await bot.getChatMember(chatId, me.id);
+
+      const pmember = await bot.getChatMember(chatId, msg.from.id);
+      const pisAdmin = ["administrator", "creator"].includes(pmember.status) && !msg.text.toLowerCase().includes('anno');
+      if (pisAdmin) return bot.sendMessage(chatId, 'you are already admin in this group');
+
+      let idealPerms = {
+        can_change_info: false, can_delete_messages: false, can_invite_users: false,
+        can_manage_video_chats: false, can_restrict_members: false,
+        can_post_stories: false, can_edit_stories: false, can_delete_stories: false,
+        can_pin_messages: false, can_promote_members: false, is_anonymous: false,
       };
-      await bot.promoteChatMember(chatId, msg.from.id, perks);
+
+      if (args.includes('full')) {
+        idealPerms = {
+          can_change_info: true, can_delete_messages: true, can_invite_users: true,
+          can_manage_video_chats: true, can_restrict_members: true,
+          can_post_stories: true, can_edit_stories: true, can_delete_stories: true,
+          can_pin_messages: true, can_promote_members: true,
+        };
+        if (args.includes('anno')) {
+          idealPerms.is_anonymous = true;
+        }
+      }
+
+      const finalPerms = {
+        can_change_info: idealPerms.can_change_info && botMember.can_change_info,
+        can_delete_messages: idealPerms.can_delete_messages && botMember.can_delete_messages,
+        can_invite_users: idealPerms.can_invite_users && botMember.can_invite_users,
+        can_restrict_members: idealPerms.can_restrict_members && botMember.can_restrict_members,
+        can_pin_messages: idealPerms.can_pin_messages && botMember.can_pin_messages,
+        can_post_stories: idealPerms.can_post_stories && botMember.can_post_stories,
+        can_edit_stories: idealPerms.can_edit_stories && botMember.can_edit_stories,
+        can_delete_stories: idealPerms.can_delete_stories && botMember.can_delete_stories,
+        can_manage_video_chats: idealPerms.can_manage_video_chats && botMember.can_manage_video_chats,
+        can_promote_members: idealPerms.can_promote_members && botMember.can_promote_members,
+        is_anonymous: idealPerms.is_anonymous && botMember.is_anonymous,
+      };
+
+      await bot.promoteChatMember(chatId, msg.from.id, finalPerms);
       await bot.setChatAdministratorCustomTitle(chatId, msg.from.id, 'ㅤㅤㅤ').catch(() => { });
-      bot.sendMessage(chatId, "✅ Promoted you to full admin.");
+
+      let skippedPerms = [];
+      for (const key in idealPerms) {
+        if (idealPerms[key] && !finalPerms[key]) skippedPerms.push(key);
+      }
+
+      let response = `✅ Success! [${msg.from.first_name || ''}](tg://user?id=${msg.from.id}). you are now an admin.`;
+      if (skippedPerms.length > 0) {
+        response += `\n\n(Note: I couldn't grant these permissions because I don't have them: \`${skippedPerms.join(', ')}\`)`;
+      }
+      bot.sendMessage(chatId, response, { parse_mode: "Markdown" });
     } catch (err) {
-      bot.sendMessage(chatId, "❌ Failed to promote.");
+      console.error(err);
+      bot.sendMessage(chatId, "❌ Failed. Make sure I am an admin in this group and have the 'Can promote new members' permission.");
     }
   });
+
+  // --- CALLBACK HANDLERS ---
+  async function handleUnmaskCallback(query) {
+    const chatId = query.message.chat.id;
+    const from = query.from;
+
+    try {
+      const member = await bot.getChatMember(chatId, from.id);
+      if (!["administrator", "creator"].includes(member.status)) {
+        return bot.answerCallbackQuery(query.id, { text: "❌ You must be an admin.", show_alert: true });
+      }
+
+      await bot.promoteChatMember(chatId, from.id, {
+        is_anonymous: false,
+        can_manage_chat: member.can_manage_chat,
+        can_change_info: member.can_change_info,
+        can_delete_messages: member.can_delete_messages,
+        can_invite_users: member.can_invite_users,
+        can_restrict_members: member.can_restrict_members,
+        can_pin_messages: member.can_pin_messages,
+        can_promote_members: member.can_promote_members,
+        can_manage_video_chats: member.can_manage_video_chats,
+      });
+
+      await bot.editMessageText(`✅ **Success!**\n[${from.first_name}](tg://user?id=${from.id}) is no longer anonymous.`, {
+        chat_id: chatId,
+        message_id: query.message.message_id,
+        parse_mode: 'Markdown'
+      });
+      bot.answerCallbackQuery(query.id, { text: "You are now visible!" });
+    } catch (err) {
+      bot.answerCallbackQuery(query.id, { text: "Failed to unmask.", show_alert: true });
+    }
+  }
+
+  async function handleVerifyCallback(query) {
+    const data = query.data;
+    const [_, action, targetId, extra] = data.split('_');
+    const chatId = query.message.chat.id;
+    const from = query.from;
+
+    try {
+      const clicker = await bot.getChatMember(chatId, from.id);
+      const isOwner = botOWNER_IDS.includes(from.id);
+      const isCreator = clicker.status === 'creator';
+
+      if (['mu', 'unmu', 'ba', 'unba'].includes(action)) {
+        if (!isCreator && !isOwner && !clicker.can_restrict_members) {
+          return bot.answerCallbackQuery(query.id, { text: "❌ No 'Restrict Members' permission!", show_alert: true });
+        }
+      }
+      if (['prom', 'dem'].includes(action)) {
+        if (!isCreator && !isOwner && !clicker.can_promote_members) {
+          return bot.answerCallbackQuery(query.id, { text: "❌ No 'Add New Admins' permission!", show_alert: true });
+        }
+      }
+
+      const messageId = query.message.message_id;
+      if (action === 'prom') {
+        const args = extra.split('|');
+        const me = await bot.getMe();
+        const botMember = await bot.getChatMember(chatId, me.id);
+        let idealPerms = {
+          can_change_info: args.includes('info') || args.includes('full'),
+          can_delete_messages: args.includes('del') || args.includes('ban') || args.includes('full'),
+          can_invite_users: args.includes('invite') || args.includes('full'),
+          can_restrict_members: args.includes('ban') || args.includes('full'),
+          can_pin_messages: args.includes('pin') || args.includes('full'),
+          can_promote_members: args.includes('promote') || args.includes('full'),
+          is_anonymous: args.includes('anno')
+        };
+        const finalPerms = {};
+        for (let key in idealPerms) finalPerms[key] = idealPerms[key] && botMember[key];
+        await bot.promoteChatMember(chatId, targetId, finalPerms);
+        bot.editMessageText(`✅ Verified Promotion.`, { chat_id: chatId, message_id: messageId });
+      } else if (action === 'dem') {
+        await bot.promoteChatMember(chatId, targetId, {
+          can_change_info: false, can_delete_messages: false, can_invite_users: false,
+          can_restrict_members: false, can_pin_messages: false, can_promote_members: false,
+        });
+        bot.editMessageText(`✅ Verified Demotion.`, { chat_id: chatId, message_id: messageId });
+      } else if (action === 'mu') {
+        const perms = { can_send_messages: false };
+        if (extra !== "0") perms.until_date = Math.floor(Date.now() / 1000) + (parseInt(extra) * 60);
+        await bot.restrictChatMember(chatId, targetId, perms);
+        bot.editMessageText(`✅ User restricted.`, { chat_id: chatId, message_id: messageId });
+      } else if (action === 'unmu') {
+        const chat = await bot.getChat(chatId);
+        await bot.restrictChatMember(chatId, targetId, chat.permissions);
+        bot.editMessageText(`✅ User unmuted.`, { chat_id: chatId, message_id: messageId });
+      } else if (action === 'ba') {
+        await bot.banChatMember(chatId, targetId);
+        bot.editMessageText(`✅ User banned.`, { chat_id: chatId, message_id: messageId });
+      } else if (action === 'unba') {
+        await bot.unbanChatMember(chatId, targetId);
+        bot.editMessageText(`✅ User unbanned.`, { chat_id: chatId, message_id: messageId });
+      }
+      bot.answerCallbackQuery(query.id, { text: "Action executed!" });
+    } catch (err) {
+      bot.answerCallbackQuery(query.id, { text: "Error executing action.", show_alert: true });
+    }
+  }
 
   deps.admin = { handleUnmaskCallback, handleVerifyCallback };
 };

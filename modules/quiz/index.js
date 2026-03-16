@@ -145,6 +145,7 @@ module.exports = function (bot, db) {
         type: "quiz",
         correct_option_id: q.answer,
         is_anonymous: false,
+        open_period: 20,
         explanation: q.explanation || ""
       });
       session.currentPollId = poll.poll.id;
@@ -154,7 +155,7 @@ module.exports = function (bot, db) {
           session.currentQ++;
           sendNextQuestion(chatId);
         }
-      }, 20000);
+      }, 21000);
     } catch (err) { }
   }
 

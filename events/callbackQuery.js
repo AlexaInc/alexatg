@@ -1,0 +1,135 @@
+module.exports = function (bot, deps) {
+    const {
+        botOWNER_IDS,
+        botId,
+        Invite,
+        UserMap,
+        BannedUser,
+        CustomQuizModel,
+        UserQuizScoreModel,
+        activeQuizzes,
+        startQuiz,
+        stopQuiz,
+        db,
+        userRegistrationState,
+        noPermissions
+    } = deps;
+
+    bot.on("callback_query", async (query) => {
+        const chatId = query.message.chat.id.toString();
+        const data = query.data;
+        const userId = query.from.id;
+
+        // --- Routing ---
+        if (data === 'unmask_admin') {
+            return deps.admin.handleUnmaskCallback(query);
+        }
+
+        if (data.startsWith('verify_')) {
+            return deps.admin.handleVerifyCallback(query);
+        }
+
+        if (data.startsWith('ready_quiz_')) {
+            return deps.quiz.handleReadyCallback(query);
+        }
+
+        if (data.startsWith('qlead_')) {
+            return deps.quiz.handleLeaderboardCallback(query);
+        }
+
+        if (data.startsWith('setting_') || data === 'confirm_delete_profile' || data.startsWith('like_') || data.startsWith('next_')) {
+            return deps.dating.handleDatingCallback(query);
+        }
+
+        // --- Remaining Handlers ---
+        const message = query.message;
+        const from = query.from;
+        const messageId = query.message.message_id;
+
+        // --- Admin & Invites ---
+        if (data.startsWith("check_")) {
+            const [, targetUserId, groupId] = data.split("_");
+            const inviteData = await Invite.findOne({ groupId, userId: targetUserId });
+            const count = inviteData ? inviteData.count : 0;
+            return bot.answerCallbackQuery(query.id, {
+                text: `📊 You have invited ${count} members.`,
+                show_alert: true,
+            });
+        }
+
+        if (data.startsWith("unban_")) {
+            const [, targetUserId, groupId] = data.split("_");
+            const member = await bot.getChatMember(groupId, userId);
+            if (!["administrator", "creator"].includes(member.status)) {
+                return bot.answerCallbackQuery(query.id, { text: "❌ Only admins can unban.", show_alert: true });
+            }
+            await BannedUser.deleteOne({ groupId, userId: targetUserId });
+            bot.answerCallbackQuery(query.id, { text: "✅ User unbanned!" });
+            bot.sendMessage(groupId, `✅ <a href="tg://user?id=${targetUserId}">User</a> has been <b>unbanned</b> by ${from.first_name}.`, { parse_mode: "HTML" });
+            return;
+        }
+
+        if (data.startsWith("unmute_")) {
+            const [, targetUserId, groupId] = data.split("_");
+            const member = await bot.getChatMember(groupId, userId);
+            if (!["administrator", "creator"].includes(member.status)) {
+                return bot.answerCallbackQuery(query.id, { text: "❌ Only admins can unmute.", show_alert: true });
+            }
+            let userInvite = await Invite.findOne({ groupId, userId: targetUserId });
+            if (!userInvite) {
+                userInvite = new Invite({ groupId, userId: targetUserId, count: 11 });
+            } else {
+                userInvite.count = userInvite.count + 11;
+            }
+            await userInvite.save();
+            bot.answerCallbackQuery(query.id, { text: "✅ User unmuted!", show_alert: true });
+            bot.sendMessage(groupId, `✅ User <a href="tg://user?id=${targetUserId}">unlocked</a> by admin ${from.first_name}`, { parse_mode: "HTML" });
+            return;
+        }
+
+        // --- UI Navigation ---
+        const ui = require('../utils/ui');
+
+        const editMessage = (text, markup) => {
+            bot.editMessageCaption(text, {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: 'HTML',
+                reply_markup: markup
+            }).catch(() => { });
+        };
+
+        switch (data) {
+            case 'start_menu':
+                editMessage(ui.getStartMessage(from.first_name || 'User'), ui.startKeyboard);
+                break;
+            case 'contact_us':
+                if (deps.getContactKeyboard()) {
+                    editMessage('Here are the contacts for my owners:', deps.getContactKeyboard());
+                } else {
+                    bot.answerCallbackQuery(query.id, { text: 'Contacts are still loading...', show_alert: true });
+                }
+                break;
+            case 'help_main':
+                editMessage('Please select a command category:', ui.helpMainKeyboard);
+                break;
+            case 'help_owner':
+                editMessage(`<b>Owner Commands:</b>\n\n/bc - Send a message\n /stats - Get bot stats`, ui.backToHelpKeyboard);
+                break;
+            case 'help_premium':
+                editMessage(`/fq - create fake sticker\nand you can use ai function unlimited`, ui.backToHelpKeyboard);
+                break;
+            case 'help_nsfw':
+                editMessage(ui.nsfwCommands.join("\n"), ui.backToHelpKeyboard);
+                break;
+            case 'help_admin':
+                editMessage('<b>Group Admin Commands:</b>\n\n/ba - Ban a user\n/mu - Mute a user\n/filter - filter a message\nfilters - get filters list\n/stop - stop filter', ui.backToHelpKeyboard);
+                break;
+            case 'help_ai':
+                editMessage('<b>Al Commands:</b>\n\n/ai - ask from ai\n/aic - check how many lef today', ui.backToHelpKeyboard);
+                break;
+        }
+
+        bot.answerCallbackQuery(query.id).catch(() => { });
+    });
+};

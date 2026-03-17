@@ -1,7 +1,7 @@
 require('dotenv').config();
 const TelegramBot = require('node-telegram-bot-api');
 const mongoose = require('mongoose');
-
+const logGrpid = process.env.logGrpid;
 const token = process.env.SECONDARY_BOT_TOKEN;
 const mongoUri = process.env.SECONDARY_MONGO_URI;
 

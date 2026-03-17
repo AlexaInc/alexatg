@@ -72,48 +72,60 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
     if (!botOWNER_IDS.includes(msg.from.id)) return bot.sendMessage(msg.chat.id, 'you are not bot owner');
     bot.sendMessage(msg.chat.id, 'Updating started...');
     try {
-      await exec('git pull');
-      bot.sendMessage(msg.chat.id, '✅ Update downloaded successfully restarting bot...');
-      if (process.env.PM2_HOME || process.env.pm_id) {
-        // PM2 හරහා Restart කිරීම (මෙහිදී 'all' හෝ app name එක භාවිතා කළ හැක)
-        const appName = process.env.name || 'all';
+      await bot.sendMessage(msg.chat.id, "🚀 Updating... Please wait.");
 
-        // Log group එකට පණිවිඩය යවා Restart කිරීම
-        bot.sendMessage(LOG_GROUP_ID, `🚀 Bot Updated & Restarting via PM2: *${appName}*`, { parse_mode: 'Markdown' })
+      // 1. මුලින්ම Polling නතර කරන්න (මෙය ඉතා වැදගත්)
+      await bot.stopPolling();
+
+      exec('git pull', (err, stdout, stderr) => {
+        if (err) {
+          bot.startPolling(); // Error එකක් ආවොත් නැවත Polling පටන් ගන්න
+          return bot.sendMessage(msg.chat.id, `❌ Git Error: ${err.message}`);
+        }
+
+        // 2. Logs group එකට මැසේජ් එක යවන්න
+        bot.sendMessage(logGrpid, "✅ Bot updated and restarting safely...")
           .then(() => {
-            exec(`pm2 restart ${appName}`);
+            // 3. PM2 භාවිතා කරන්නේ නම් පමණක් restart කරන්න
+            if (process.env.pm_id || process.env.PM2_HOME) {
+              exec(`pm2 restart ${process.env.name || 'all'}`);
+            } else {
+              process.exit();
+            }
           });
-      } else {
-        // ඍජුවම Node හරහා ක්‍රියාත්මක වේ නම්
-        bot.sendMessage(LOG_GROUP_ID, "🚀 Bot Updated & Restarting via Node (Process Exit)...")
-          .then(() => {
-            // Process එක නතර කිරීම (Nodemon හෝ Docker භාවිතා කරන්නේ නම් එය ස්වයංක්‍රීයව Restart වේ)
-            process.exit();
-          });
-      }
-    } catch (err) {
-      bot.sendMessage(msg.chat.id, 'Error updating.');
+      });
+    } catch (e) {
+      console.error(e);
+      bot.startPolling();
     }
   });
   bot.onText(/^\/restart/, async (msg) => {
     if (!botOWNER_IDS.includes(msg.from.id)) return bot.sendMessage(msg.chat.id, 'you are not bot owner');
-    bot.sendMessage(msg.chat.id, 'Restarting bot...');
-    if (process.env.PM2_HOME || process.env.pm_id) {
-      // PM2 හරහා Restart කිරීම (මෙහිදී 'all' හෝ app name එක භාවිතා කළ හැක)
-      const appName = process.env.name || 'all';
+    try {
+      await bot.sendMessage(msg.chat.id, "Restarting...");
 
-      // Log group එකට පණිවිඩය යවා Restart කිරීම
-      bot.sendMessage(LOG_GROUP_ID, `🚀 Bot Restarting via PM2: *${appName}*`, { parse_mode: 'Markdown' })
-        .then(() => {
-          exec(`pm2 restart ${appName}`);
-        });
-    } else {
-      // ඍජුවම Node හරහා ක්‍රියාත්මක වේ නම්
-      bot.sendMessage(LOG_GROUP_ID, "🚀 Bot Restarting via Node (Process Exit)...")
-        .then(() => {
-          // Process එක නතර කිරීම (Nodemon හෝ Docker භාවිතා කරන්නේ නම් එය ස්වයංක්‍රීයව Restart වේ)
-          process.exit();
-        });
+      // 2. දැනට පවතින Polling එක නතර කිරීම (Polling conflict මගහැරීමට)
+      await bot.stopPolling();
+
+      // 3. Log group එකට පණිවිඩය යැවීම
+      // මෙහිදී 'logGrpid' විචල්‍යය භාවිතා කර ඇත
+      await bot.sendMessage(logGrpid, "🚀 Bot Restart Initiated\n\nStatus: _Restarting safely..._", { parse_mode: 'Markdown' });
+
+      // 4. PM2 හෝ Node හරහා restart කිරීම
+      if (process.env.pm_id || process.env.PM2_HOME) {
+        // PM2 හරහා නම්, වත්මන් app name එක ලබාගෙන restart කරයි
+        const appName = process.env.name || 'all';
+        exec(`pm2 restart ${appName}`);
+      } else {
+        // ඍජුවම node හරහා නම් process එක නතර කරයි
+        // (Nodemon වැනි දෙයක් භාවිතා කරන්නේ නම් එය ස්වයංක්‍රීයව පණ ගැන්වේ)
+        process.exit();
+      }
+
+    } catch (error) {
+      console.error(error);
+      bot.startPolling(); // දෝෂයක් ආවොත් නැවත polling පටන් ගන්න
+      bot.sendMessage(msg.chat.id, `❌ Restart Error: ${error.message}`);
     }
   });
   // --- /fq Command (Sticker Generator) ---

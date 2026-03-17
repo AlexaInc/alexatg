@@ -76,17 +76,17 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
 
       // 1. මුලින්ම Polling නතර කරන්න (මෙය ඉතා වැදගත්)
       await bot.stopPolling();
+      await new Promise(r => setTimeout(r, 2000)); // Give it 2 seconds to release connections
 
       exec('git pull', (err, stdout, stderr) => {
         if (err) {
-          bot.startPolling(); // Error එකක් ආවොත් නැවත Polling පටන් ගන්න
+          bot.startPolling();
           return bot.sendMessage(msg.chat.id, `❌ Git Error: ${err.message}`);
         }
 
-        // 2. Logs group එකට මැසේජ් එක යවන්න
         bot.sendMessage(logGrpid, "✅ Bot updated and restarting safely...")
-          .then(() => {
-            // 3. PM2 භාවිතා කරන්නේ නම් පමණක් restart කරන්න
+          .then(async () => {
+            await new Promise(r => setTimeout(r, 1000)); // Delay for message delivery
             if (process.env.pm_id || process.env.PM2_HOME) {
               exec(`pm2 restart ${process.env.name || 'all'}`);
             } else {
@@ -106,19 +106,15 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
 
       // 2. දැනට පවතින Polling එක නතර කිරීම (Polling conflict මගහැරීමට)
       await bot.stopPolling();
+      await new Promise(r => setTimeout(r, 2000)); // 2-second delay to release polling
 
-      // 3. Log group එකට පණිවිඩය යැවීම
-      // මෙහිදී 'logGrpid' විචල්‍යය භාවිතා කර ඇත
       await bot.sendMessage(logGrpid, "🚀 Bot Restart Initiated\n\nStatus: _Restarting safely..._", { parse_mode: 'Markdown' });
+      await new Promise(r => setTimeout(r, 1000)); // Delay for message delivery
 
-      // 4. PM2 හෝ Node හරහා restart කිරීම
       if (process.env.pm_id || process.env.PM2_HOME) {
-        // PM2 හරහා නම්, වත්මන් app name එක ලබාගෙන restart කරයි
         const appName = process.env.name || 'all';
         exec(`pm2 restart ${appName}`);
       } else {
-        // ඍජුවම node හරහා නම් process එක නතර කරයි
-        // (Nodemon වැනි දෙයක් භාවිතා කරන්නේ නම් එය ස්වයංක්‍රීයව පණ ගැන්වේ)
         process.exit();
       }
 

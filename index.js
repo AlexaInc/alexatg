@@ -64,6 +64,20 @@ const UserQuizScoreModel = db.getUserQuizScoreModel();
 const secondaryBotProcess = spawn('node', [path.join(__dirname, 'secondary_bot.js')], { stdio: 'inherit' });
 secondaryBotProcess.on('error', (err) => console.error('Failed to start secondary_bot.js:', err));
 
+// Graceful shutdown helper
+const shutdown = async () => {
+  console.log('Stopping bot and cleaning up...');
+  await bot.stopPolling();
+  if (secondaryBotProcess) {
+    console.log('Killing secondary bot...');
+    secondaryBotProcess.kill('SIGINT');
+  }
+  process.exit(0);
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+
 // Dependency Injection Object
 const deps = {
   logGrpid,

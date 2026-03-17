@@ -15,7 +15,7 @@ const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap } = db;
 
 // --- CONFIG ---
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const botOWNER_IDS = [process.env.botOWNER_IDS];
+const botOWNER_IDS = process.env.botOWNER_IDS.split(',').map(id => parseInt(id));
 const { readIds, writeIds, loadIdsToVariable } = require('./idsManager');
 let allIds = loadIdsToVariable();
 let Specialuser = [...botOWNER_IDS, ...allIds];

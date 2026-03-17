@@ -5,7 +5,7 @@ const { StringSession } = require("telegram/sessions");
 const { exec } = require('child_process');
 
 module.exports = function (bot, deps) {
-  const { botOWNER_IDS, handlers, groupChatIds, userChatIds, saveGroupIds, saveUserIds, CustomQuizModel, Specialuser } = deps;
+  const { botOWNER_IDS, handlers, groupChatIds, userChatIds, saveGroupIds, saveUserIds, CustomQuizModel, Specialuser, logGrpid } = deps;
   const { getProfilePhoto, downloadImage, handleAnonymous, getTarget } = handlers;
   const apiId = 24388624;
   const apiHash = "aa6e6675a9a88534f8ded7f318394d5f";

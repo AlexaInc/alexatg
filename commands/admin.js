@@ -1,5 +1,5 @@
 module.exports = function (bot, deps) {
-  const { botOWNER_IDS, handlers } = deps;
+  const { botOWNER_IDS, UserMap, handlers } = deps;
   const { getTarget, handleAnonymous } = handlers;
 
   // --- MUTE COMMAND ---
@@ -12,14 +12,14 @@ module.exports = function (bot, deps) {
     if (!msg.reply_to_message && !args.length) return bot.sendMessage(chatId, "⚠️ Reply to a user or provide their ID.");
 
     try {
-      const { targetUserId, targetUserName, error } = await getTarget(msg, args);
+      const { targetUserId, targetUserName, error } = await getTarget(bot, UserMap, msg, args);
       if (error) return bot.sendMessage(chatId, error);
 
       const caller = await bot.getChatMember(chatId, msg.from.id);
       const isOwner = botOWNER_IDS.includes(msg.from.id);
       const canMute = caller.status === 'creator' || caller.can_restrict_members || isOwner;
 
-      if (await handleAnonymous(msg, "mu", targetUserId, targetUserName)) return;
+      if (await handleAnonymous(bot, msg, "mu", targetUserId, targetUserName)) return;
       if (!canMute) return bot.sendMessage(chatId, "❌ You don't have the 'Restrict Members' permission.");
 
       // Staff Protection
@@ -62,13 +62,13 @@ module.exports = function (bot, deps) {
     if (!msg.reply_to_message && !args.length) return bot.sendMessage(chatId, "⚠️ Reply or ID required.");
 
     try {
-      const { targetUserId, targetUserName, error } = await getTarget(msg, args);
+      const { targetUserId, targetUserName, error } = await getTarget(bot, UserMap, msg, args);
       if (error) return bot.sendMessage(chatId, error);
 
       const caller = await bot.getChatMember(chatId, msg.from.id);
       const canUnmute = caller.status === 'creator' || caller.can_restrict_members || botOWNER_IDS.includes(msg.from.id);
 
-      if (await handleAnonymous(msg, "unmu", targetUserId, targetUserName)) return;
+      if (await handleAnonymous(bot, msg, "unmu", targetUserId, targetUserName)) return;
       if (!canUnmute) return bot.sendMessage(chatId, "❌ No permission.");
 
       const chat = await bot.getChat(chatId);
@@ -86,14 +86,14 @@ module.exports = function (bot, deps) {
     if (!msg.reply_to_message && !args.length) return bot.sendMessage(chatId, "⚠️ Reply or ID required.");
 
     try {
-      const { targetUserId, targetUserName, error } = await getTarget(msg, args);
+      const { targetUserId, targetUserName, error } = await getTarget(bot, UserMap, msg, args);
       if (error) return bot.sendMessage(chatId, error);
 
       const caller = await bot.getChatMember(chatId, msg.from.id);
       const isOwner = botOWNER_IDS.includes(msg.from.id);
       const canBan = caller.status === 'creator' || caller.can_restrict_members || isOwner;
 
-      if (await handleAnonymous(msg, "ba", targetUserId, targetUserName)) return;
+      if (await handleAnonymous(bot, msg, "ba", targetUserId, targetUserName)) return;
       if (!canBan) return bot.sendMessage(chatId, "❌ No permission.");
 
       const targetMember = await bot.getChatMember(chatId, targetUserId);
@@ -114,14 +114,14 @@ module.exports = function (bot, deps) {
     if (!msg.reply_to_message && !args.length) return bot.sendMessage(chatId, "⚠️ Reply or ID required.");
 
     try {
-      const { targetUserId, targetUserName, error } = await getTarget(msg, args);
+      const { targetUserId, targetUserName, error } = await getTarget(bot, UserMap, msg, args);
       if (error) return bot.sendMessage(chatId, error);
 
       const caller = await bot.getChatMember(chatId, msg.from.id);
       const isOwner = botOWNER_IDS.includes(msg.from.id);
       const canUnban = caller.status === 'creator' || caller.can_restrict_members || isOwner;
 
-      if (await handleAnonymous(msg, "unba", targetUserId, targetUserName)) return;
+      if (await handleAnonymous(bot, msg, "unba", targetUserId, targetUserName)) return;
       if (!canUnban) return bot.sendMessage(chatId, "❌ No permission.");
 
       await bot.unbanChatMember(chatId, targetUserId);
@@ -132,7 +132,10 @@ module.exports = function (bot, deps) {
   });
 
   // --- PROMOTE COMMAND ---
+
   bot.onText(/^\/prom/, async (msg) => {
+    if (msg.text && msg.text.toLowerCase().startsWith('/promme')) return;
+
     const text = msg.text || '';
     const command = text.split(' ')[0].toLowerCase();
     const args = text.substring(command.length).trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -149,7 +152,7 @@ module.exports = function (bot, deps) {
       const userToPromote = msg.reply_to_message.from;
       const userToPromotename = userToPromote.first_name || '';
 
-      if (await handleAnonymous(msg, "prom", userToPromote.id, userToPromotename, args.join('|'))) return;
+      if (await handleAnonymous(bot, msg, "prom", userToPromote.id, userToPromotename, args.join('|'))) return;
       if (!canPromote) return bot.sendMessage(chatId, "❌ You don't have the 'Add New Admins' permission.");
 
       const targetStatus = await bot.getChatMember(chatId, userToPromote.id);
@@ -194,7 +197,7 @@ module.exports = function (bot, deps) {
       const canDemote = caller.status === 'creator' || caller.can_promote_members || isOwner;
 
       const userToDemote = msg.reply_to_message.from;
-      if (await handleAnonymous(msg, "dem", userToDemote.id, userToDemote.first_name)) return;
+      if (await handleAnonymous(bot, msg, "dem", userToDemote.id, userToDemote.first_name)) return;
       if (!canDemote) return bot.sendMessage(chatId, "❌ You need 'Add New Admins' permission to demote.");
 
       await bot.promoteChatMember(chatId, userToDemote.id, {

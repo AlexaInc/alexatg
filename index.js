@@ -15,11 +15,11 @@ const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap } = db;
 
 // --- CONFIG ---
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const botOWNER_IDS = [7829175087, 1700916606, 8445943463, 7498127359, 7734136119, 8229093349, 8232798620];
+const botOWNER_IDS = [process.env.botOWNER_IDS];
 const { readIds, writeIds, loadIdsToVariable } = require('./idsManager');
 let allIds = loadIdsToVariable();
 let Specialuser = [...botOWNER_IDS, ...allIds];
-
+const logGrpid = process.env.logGrpid;
 const noPermissions = {
   can_send_messages: false,
   can_send_audios: false,
@@ -66,6 +66,7 @@ secondaryBotProcess.on('error', (err) => console.error('Failed to start secondar
 
 // Dependency Injection Object
 const deps = {
+  logGrpid,
   botOWNER_IDS,
   get Specialuser() { return Specialuser; },
   setSpecialuser: (newVal) => { Specialuser = newVal; },
@@ -149,7 +150,7 @@ const initializeBot = async () => {
     const me = await bot.getMe();
     BOT_ID = me.id;
     console.log(`Bot starting... Logged in as ${me.username}`);
-
+    bot.sendMessage(logGrpid, `Bot starting... Logged in as ${me.username}`);
     const promises = botOWNER_IDS.map(id => bot.getChat(id).catch(() => null));
     const results = await Promise.all(promises);
     const ownerChats = results.filter(c => c !== null);

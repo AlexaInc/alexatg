@@ -2,6 +2,7 @@ const createQuoteSticker = require('../generatequote2');
 const fs = require('fs');
 const { TelegramClient, Api } = require("telegram");
 const { StringSession } = require("telegram/sessions");
+const { exec } = require('child_process');
 
 module.exports = function (bot, deps) {
   const { botOWNER_IDS, handlers, groupChatIds, userChatIds, saveGroupIds, saveUserIds, CustomQuizModel, Specialuser } = deps;
@@ -67,6 +68,26 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
     bot.sendMessage(msg.chat.id, stats, { parse_mode: 'Markdown' });
   });
 
+  bot.onText(/^\/update/, async (msg) => {
+    if (!botOWNER_IDS.includes(msg.from.id)) return bot.sendMessage(msg.chat.id, 'you are not bot owner');
+    bot.sendMessage(msg.chat.id, 'Updating started...');
+    try {
+      await exec('git pull');
+      bot.sendMessage(msg.chat.id, '✅ Update downloaded successfully restarting bot...');
+      setTimeout(() => {
+        process.exit(0);
+      }, 5000);
+    } catch (err) {
+      bot.sendMessage(msg.chat.id, 'Error updating.');
+    }
+  });
+  bot.onText(/^\/restart/, async (msg) => {
+    if (!botOWNER_IDS.includes(msg.from.id)) return bot.sendMessage(msg.chat.id, 'you are not bot owner');
+    bot.sendMessage(msg.chat.id, 'Restarting bot...');
+    setTimeout(() => {
+      process.exit(0);
+    }, 5000);
+  });
   // --- /fq Command (Sticker Generator) ---
   bot.onText(/^\/fq/, async (msg) => {
     const text = msg.text || '';

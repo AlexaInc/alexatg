@@ -74,53 +74,37 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
     try {
       await bot.sendMessage(msg.chat.id, "🚀 Updating... Please wait.");
 
-      // 1. මුලින්ම Polling නතර කරන්න (මෙය ඉතා වැදගත්)
-      await bot.stopPolling();
-      await new Promise(r => setTimeout(r, 2000)); // Give it 2 seconds to release connections
-
-      exec('git pull', (err, stdout, stderr) => {
+      exec('git pull', async (err, stdout, stderr) => {
         if (err) {
-          bot.startPolling();
           return bot.sendMessage(msg.chat.id, `❌ Git Error: ${err.message}`);
         }
 
-        bot.sendMessage(logGrpid, "✅ Bot updated and restarting safely...")
-          .then(async () => {
-            await new Promise(r => setTimeout(r, 1000)); // Delay for message delivery
-            if (process.env.pm_id || process.env.PM2_HOME) {
-              exec(`pm2 restart ${process.env.name || 'all'}`);
-            } else {
-              process.exit();
-            }
-          });
+        if (logGrpid) await bot.sendMessage(logGrpid, "✅ Update successful. Restarting bots...");
+
+        // Stop all bot instances
+        await deps.stopBots();
+        process.exit(0);
       });
     } catch (e) {
       console.error(e);
-      bot.startPolling();
+      bot.sendMessage(msg.chat.id, "❌ Error during update.");
     }
   });
   bot.onText(/^\/restart/, async (msg) => {
     if (!botOWNER_IDS.includes(msg.from.id)) return bot.sendMessage(msg.chat.id, 'you are not bot owner');
     try {
-      await bot.sendMessage(msg.chat.id, "Restarting...");
+      await bot.sendMessage(msg.chat.id, "🚀 Restarting bots...");
 
-      // 2. දැනට පවතින Polling එක නතර කිරීම (Polling conflict මගහැරීමට)
-      await bot.stopPolling();
-      await new Promise(r => setTimeout(r, 2000)); // 2-second delay to release polling
+      if (logGrpid) await bot.sendMessage(logGrpid, "🔄 **Manual Restart**\nInitiated by owner.");
 
-      await bot.sendMessage(logGrpid, "🚀 Bot Restart Initiated\n\nStatus: _Restarting safely..._", { parse_mode: 'Markdown' });
-      await new Promise(r => setTimeout(r, 1000)); // Delay for message delivery
+      // Stop all bots
+      await deps.stopBots();
 
-      if (process.env.pm_id || process.env.PM2_HOME) {
-        const appName = process.env.name || 'all';
-        exec(`pm2 restart ${appName}`);
-      } else {
-        process.exit();
-      }
+      // Final exit - PM2 will restart
+      process.exit(0);
 
     } catch (error) {
       console.error(error);
-      bot.startPolling(); // දෝෂයක් ආවොත් නැවත polling පටන් ගන්න
       bot.sendMessage(msg.chat.id, `❌ Restart Error: ${error.message}`);
     }
   });

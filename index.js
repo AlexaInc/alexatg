@@ -65,13 +65,41 @@ const secondaryBotProcess = spawn('node', [path.join(__dirname, 'secondary_bot.j
 secondaryBotProcess.on('error', (err) => console.error('Failed to start secondary_bot.js:', err));
 
 // Graceful shutdown helper
-const shutdown = async () => {
-  console.log('Stopping bot and cleaning up...');
-  await bot.stopPolling();
+const stopBots = async () => {
+  console.log('Stopping bots and cleaning up...');
+  try {
+    // 1. Stop polling first to stop receiving new updates
+    if (bot.isPolling()) {
+      await bot.stopPolling();
+      console.log('Main bot polling stopped.');
+    }
+  } catch (e) {
+    console.error('Error stopping main bot polling:', e.message);
+  }
+
+  // 2. Kill secondary bot and wait for it
   if (secondaryBotProcess) {
     console.log('Killing secondary bot...');
-    secondaryBotProcess.kill('SIGINT');
+    const killPromise = new Promise((resolve) => {
+      secondaryBotProcess.once('exit', resolve);
+      secondaryBotProcess.kill('SIGINT');
+
+      // Hard kill after 4 seconds if SIGINT doesn't work
+      setTimeout(() => {
+        secondaryBotProcess.kill('SIGKILL');
+        resolve();
+      }, 4000);
+    });
+    await killPromise;
+    console.log('Secondary bot process cleaned up.');
   }
+
+  // 3. Small buffer to let network connections close
+  await new Promise(r => setTimeout(r, 1000));
+};
+
+const shutdown = async () => {
+  await stopBots();
   process.exit(0);
 };
 
@@ -109,7 +137,8 @@ const deps = {
   userRegistrationState,
   noPermissions,
   getContactKeyboard: () => contactKeyboard,
-  get BOT_ID() { return BOT_ID; }
+  get BOT_ID() { return BOT_ID; },
+  stopBots
 };
 
 // --- MODULES ---

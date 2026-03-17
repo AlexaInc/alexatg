@@ -32,7 +32,7 @@ function generateQuizId() {
 bot.onText(/\/start (.+)/, (msg, match) => {
   const chatId = msg.chat.id;
   const command = match[1];
-  
+
   if (command === 'setquiz') {
     startSetQuizFlow(chatId);
   }
@@ -62,7 +62,7 @@ function startSetQuizFlow(chatId) {
 bot.on('callback_query', (query) => {
   const chatId = query.message.chat.id;
   const data = query.data;
-  
+
   if (data === "mode_json") {
     userSessions[chatId] = { mode: 'json' };
     bot.editMessageText("📝 *JSON Mode*\n\nPlease upload a valid `.json` file containing your questions.\n\n_Format Example:_\n```json\n[\n  {\n    \"question\": \"Capital of France?\",\n    \"options\": [\"London\", \"Paris\", \"Berlin\", \"Rome\"],\n    \"answer\": 1,\n    \"explanation\": \"Paris is the capital.\"\n  }\n]\n```", {
@@ -78,7 +78,7 @@ bot.on('callback_query', (query) => {
       parse_mode: 'Markdown'
     });
   }
-  
+
   bot.answerCallbackQuery(query.id);
 });
 
@@ -86,16 +86,16 @@ bot.on('callback_query', (query) => {
 bot.on('document', async (msg) => {
   const chatId = msg.chat.id;
   const session = userSessions[chatId];
-  
+
   if (!session || session.mode !== 'json') return;
-  
+
   const fileId = msg.document.file_id;
   const fileName = msg.document.file_name;
-  
+
   if (!fileName.endsWith('.json')) {
     return bot.sendMessage(chatId, "❌ Please upload a valid `.json` file.");
   }
-  
+
   try {
     const fileStream = bot.getFileStream(fileId);
     let chunks = [];
@@ -104,19 +104,19 @@ bot.on('document', async (msg) => {
       try {
         const jsonContent = Buffer.concat(chunks).toString('utf-8');
         const questionsArray = JSON.parse(jsonContent);
-        
+
         if (!Array.isArray(questionsArray) || questionsArray.length === 0) {
           return bot.sendMessage(chatId, "❌ Invalid format. Please provide an array of questions.");
         }
-        
+
         // Basic validation
-        for (let i=0; i < questionsArray.length; i++) {
+        for (let i = 0; i < questionsArray.length; i++) {
           const q = questionsArray[i];
           if (!q.question || !Array.isArray(q.options) || typeof q.answer !== 'number') {
             return bot.sendMessage(chatId, `❌ Invalid question format at index ${i}.`);
           }
         }
-        
+
         // Save to DB
         const quizId = generateQuizId();
         const customQuiz = new CustomQuizModel({
@@ -125,18 +125,18 @@ bot.on('document', async (msg) => {
           title: fileName.replace('.json', ''),
           questions: questionsArray
         });
-        
+
         await customQuiz.save();
-        
+
         delete userSessions[chatId];
-        
+
         bot.sendMessage(chatId, `✅ *Quiz Created Successfully!*\n\nYour Quiz ID is: \`${quizId}\`\nIt contains ${questionsArray.length} questions.\n\nTo play this quiz in a group with the main bot, use:\n\`/quiz ${quizId}\``, {
           parse_mode: 'Markdown',
           reply_markup: {
-             inline_keyboard: [[{
-               text: "Share to Group",
-               switch_inline_query: `quiz ${quizId}` // Can be customized based on main bot inline features
-             }]]
+            inline_keyboard: [[{
+              text: "Share to Group",
+              switch_inline_query: `quiz ${quizId}` // Can be customized based on main bot inline features
+            }]]
           }
         });
       } catch (parseErr) {
@@ -152,25 +152,25 @@ bot.on('document', async (msg) => {
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const session = userSessions[chatId];
-  
+
   if (msg.poll && session && session.mode === 'poll') {
     const poll = msg.poll;
     if (poll.type !== 'quiz') {
       return bot.sendMessage(chatId, "❌ Please send a *Quiz* type poll. Normal polls cannot be validated.");
     }
-    
+
     const correctOptionId = poll.correct_option_id;
     if (correctOptionId === null || correctOptionId === undefined) {
       return bot.sendMessage(chatId, "❌ This quiz poll does not have a correct answer set.");
     }
-    
+
     const formattedQuestion = {
       question: poll.question,
       options: poll.options.map(o => o.text),
       answer: correctOptionId,
       explanation: poll.explanation || ""
     };
-    
+
     session.polls.push(formattedQuestion);
     bot.sendMessage(chatId, `✅ Added question *${session.polls.length}*.\nSend another poll, or type /done to save the quiz.`, { parse_mode: 'Markdown' });
   }
@@ -180,13 +180,13 @@ bot.on('message', async (msg) => {
 bot.onText(/\/done/, async (msg) => {
   const chatId = msg.chat.id;
   const session = userSessions[chatId];
-  
+
   if (!session || session.mode !== 'poll') return;
-  
+
   if (session.polls.length === 0) {
     return bot.sendMessage(chatId, "❌ You haven't sent any polls yet. Send a quiz poll first or type /cancel.");
   }
-  
+
   const quizId = generateQuizId();
   try {
     const customQuiz = new CustomQuizModel({
@@ -195,18 +195,18 @@ bot.onText(/\/done/, async (msg) => {
       title: `Poll Quiz (${session.polls.length} Qs)`,
       questions: session.polls
     });
-    
+
     await customQuiz.save();
     const qCount = session.polls.length;
     delete userSessions[chatId];
-    
+
     bot.sendMessage(chatId, `✅ *Quiz Created Successfully!*\n\nYour Quiz ID is: \`${quizId}\`\nIt contains ${qCount} questions.\n\nTo play this quiz in a group with the main bot, use:\n\`/quiz ${quizId}\``, {
       parse_mode: 'Markdown',
       reply_markup: {
-         inline_keyboard: [[{
-           text: "Share to Group",
-           switch_inline_query: `quiz ${quizId}`
-         }]]
+        inline_keyboard: [[{
+          text: "Share to Group",
+          switch_inline_query: `quiz ${quizId}`
+        }]]
       }
     });
   } catch (e) {
@@ -248,3 +248,20 @@ bot.onText(/\/myquiz/, async (msg) => {
 });
 
 console.log("Secondary bot initialized.");
+
+// Graceful shutdown
+const shutdown = async () => {
+  console.log('Secondary bot shutting down...');
+  try {
+    await bot.stopPolling();
+    console.log('Secondary bot polling stopped.');
+  } catch (e) { }
+  try {
+    await mongoose.connection.close();
+    console.log('Secondary bot MongoDB connection closed.');
+  } catch (e) { }
+  process.exit(0);
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

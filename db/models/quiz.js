@@ -4,6 +4,8 @@ const CustomQuizSchema = new mongoose.Schema({
   quizId: { type: String, required: true, unique: true },
   creatorId: String,
   title: String,
+  description: { type: String, default: '' },
+  openPeriod: { type: Number, default: 20 }, // seconds per question (10-600)
   questions: [{
     question: String,
     options: [String],

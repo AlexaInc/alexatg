@@ -26,18 +26,25 @@ module.exports = function (bot, db) {
       }
     }
 
+    const quizTitle = customQuizData ? customQuizData.title : "General Knowledge";
+    const quizDesc = customQuizData ? (customQuizData.description || '') : '';
+    const openPeriod = customQuizData ? (customQuizData.openPeriod || 20) : 20;
+
     quizSessions[chatId] = {
       questions,
       currentQ: 0,
       active: true,
       leaderboard: {},
       currentPollId: null,
-      readyPlayers: new Set(),
-      readyMessageId: null
+      readyPlayers: new Map(), // userId => firstName
+      readyMessageId: null,
+      quizTitle,
+      quizDesc,
+      openPeriod
     };
 
-    const quizTitle = customQuizData ? customQuizData.title : "General Knowledge";
-    const text = `🎮 *Quiz:* ${quizTitle}\n\nPlayers, get ready! Click the button below to join.`;
+    const descLine = quizDesc ? `\n📄 ${quizDesc}` : '';
+    const text = `🎮 *Quiz:* ${quizTitle}${descLine}\n\nPlayers, get ready! Click the button below to join.`;
     const poll = await bot.sendMessage(chatId, text, {
       parse_mode: 'Markdown',
       reply_markup: {
@@ -54,6 +61,7 @@ module.exports = function (bot, db) {
   async function handleReadyCallback(query) {
     const chatId = query.message.chat.id.toString();
     const userId = query.from.id;
+    const firstName = query.from.first_name || `User${userId}`;
     const session = quizSessions[chatId];
 
     if (!session || !session.active) return bot.answerCallbackQuery(query.id, { text: "❌ No active quiz session." });
@@ -62,13 +70,13 @@ module.exports = function (bot, db) {
       return bot.answerCallbackQuery(query.id, { text: "You are already ready!" });
     }
 
-    session.readyPlayers.add(userId);
+    session.readyPlayers.set(userId, firstName);
     bot.answerCallbackQuery(query.id, { text: "✅ You are locked in!" });
 
     // Update the message to show who's ready
-    const playersNames = Array.from(session.readyPlayers).length;
-    const quizTitle = session.questions.title || "General Knowledge";
-    const text = `🎮 *Quiz:* ${quizTitle}\n\nPlayers, get ready! Click the button below to join.\n\n👤 *Ready Players:* ${playersNames}`;
+    const names = Array.from(session.readyPlayers.values()).map(n => `• ${n}`).join('\n');
+    const descLine = session.quizDesc ? `\n📄 ${session.quizDesc}` : '';
+    const text = `🎮 *Quiz:* ${session.quizTitle}${descLine}\n\nPlayers, get ready! Click the button below to join.\n\n👥 *Ready (${session.readyPlayers.size}):*\n${names}`;
 
     bot.editMessageText(text, {
       chat_id: chatId,
@@ -91,6 +99,13 @@ module.exports = function (bot, db) {
     }
 
     bot.editMessageReplyMarkup({ inline_keyboard: [] }, { chat_id: chatId, message_id: session.readyMessageId }).catch(() => { });
+
+    const names = Array.from(session.readyPlayers.values()).map(n => `• ${n}`).join('\n');
+    const descLine = session.quizDesc ? `\n📄 ${session.quizDesc}` : '';
+    bot.editMessageText(
+      `🎮 *Quiz:* ${session.quizTitle}${descLine}\n\n✅ *${session.readyPlayers.size} player(s) ready:*\n${names}\n\n_Starting now..._`,
+      { chat_id: chatId, message_id: session.readyMessageId, parse_mode: 'Markdown' }
+    ).catch(() => { });
 
     const countdownMsgs = ["3...", "2...", "1...", "🚀 GO!"];
     for (const text of countdownMsgs) {
@@ -140,12 +155,13 @@ module.exports = function (bot, db) {
     }
 
     const q = session.questions[session.currentQ];
+    const openPeriod = session.openPeriod || 20;
     try {
       const poll = await bot.sendPoll(chatId, q.question, q.options, {
         type: "quiz",
         correct_option_id: q.answer,
         is_anonymous: false,
-        open_period: 20,
+        open_period: openPeriod,
         explanation: q.explanation || ""
       });
       session.currentPollId = poll.poll.id;
@@ -155,7 +171,7 @@ module.exports = function (bot, db) {
           session.currentQ++;
           sendNextQuestion(chatId);
         }
-      }, 21000);
+      }, (openPeriod + 1) * 1000); // +1s buffer after poll closes
     } catch (err) { }
   }
 

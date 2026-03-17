@@ -38,6 +38,7 @@ const startPollingClean = async () => {
   } catch (e) { }
   bot.startPolling();
   console.log('Secondary bot polling started cleanly.');
+  bot.sendMessage(logGrpid, 'Secondary bot polling started cleanly.');
 };
 
 startPollingClean();

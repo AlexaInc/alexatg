@@ -98,9 +98,23 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
   bot.onText(/^\/restart/, async (msg) => {
     if (!botOWNER_IDS.includes(msg.from.id)) return bot.sendMessage(msg.chat.id, 'you are not bot owner');
     bot.sendMessage(msg.chat.id, 'Restarting bot...');
-    setTimeout(() => {
-      process.exit(0);
-    }, 5000);
+    if (process.env.PM2_HOME || process.env.pm_id) {
+      // PM2 හරහා Restart කිරීම (මෙහිදී 'all' හෝ app name එක භාවිතා කළ හැක)
+      const appName = process.env.name || 'all';
+
+      // Log group එකට පණිවිඩය යවා Restart කිරීම
+      bot.sendMessage(LOG_GROUP_ID, `🚀 Bot Restarting via PM2: *${appName}*`, { parse_mode: 'Markdown' })
+        .then(() => {
+          exec(`pm2 restart ${appName}`);
+        });
+    } else {
+      // ඍජුවම Node හරහා ක්‍රියාත්මක වේ නම්
+      bot.sendMessage(LOG_GROUP_ID, "🚀 Bot Restarting via Node (Process Exit)...")
+        .then(() => {
+          // Process එක නතර කිරීම (Nodemon හෝ Docker භාවිතා කරන්නේ නම් එය ස්වයංක්‍රීයව Restart වේ)
+          process.exit();
+        });
+    }
   });
   // --- /fq Command (Sticker Generator) ---
   bot.onText(/^\/fq/, async (msg) => {

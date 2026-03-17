@@ -41,8 +41,9 @@ const activeQuizzes = {};
 const userRegistrationState = {};
 
 // --- BOT INSTANCE ---
+// Start with polling OFF — we do a safe startup below
 const bot = new TelegramBot(BOT_TOKEN, {
-  polling: true,
+  polling: false,
   request: {
     agentOptions: {
       keepAlive: true,
@@ -53,6 +54,21 @@ const bot = new TelegramBot(BOT_TOKEN, {
 
 let BOT_ID;
 let contactKeyboard = null;
+
+// Safe polling start — waits for old instance to release, drops stale updates
+const startPollingClean = async () => {
+  // Wait for any old instance to fully die and release the connection
+  await new Promise(r => setTimeout(r, 3000));
+  try {
+    // Drop any pending updates so we don't conflict with old instance
+    await bot.getUpdates({ timeout: 0, offset: -1 });
+    console.log('Dropped pending updates.');
+  } catch (e) {
+    console.log('Could not drop pending updates (safe to ignore):', e.message);
+  }
+  bot.startPolling();
+  console.log('Polling started cleanly.');
+};
 
 // --- INITIALIZATION ---
 db.connectToDatabases();
@@ -218,4 +234,8 @@ const initializeBot = async () => {
 
 bot.on('polling_error', (error) => console.log(`Polling error: ${error.code} - ${error.message}`));
 
-initializeBot();
+// Boot sequence: safe startup then initialize
+(async () => {
+  await startPollingClean();
+  await initializeBot();
+})();

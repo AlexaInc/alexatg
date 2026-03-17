@@ -15,7 +15,7 @@ mongoose.connect(mongoUri)
   .then(() => console.log('✅ Secondary Bot connected to MongoDB'))
   .catch(err => console.error('❌ Secondary Bot MongoDB Connection Error:', err));
 
-const bot = new TelegramBot(token, { polling: true });
+const bot = new TelegramBot(token, { polling: false });
 
 const CustomQuizSchema = require('./db/models/quiz');
 
@@ -28,6 +28,19 @@ const userSessions = {};
 function generateQuizId() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
+
+// Safe polling start
+const startPollingClean = async () => {
+  await new Promise(r => setTimeout(r, 3500)); // Offset from main bot startup
+  try {
+    await bot.getUpdates({ timeout: 0, offset: -1 });
+    console.log('Secondary bot: dropped pending updates.');
+  } catch (e) { }
+  bot.startPolling();
+  console.log('Secondary bot polling started cleanly.');
+};
+
+startPollingClean();
 
 bot.onText(/\/start (.+)/, (msg, match) => {
   const chatId = msg.chat.id;

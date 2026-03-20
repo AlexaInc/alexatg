@@ -29,6 +29,10 @@ module.exports = function (bot, deps) {
             return deps.admin.handleAntilinkCallback(query);
         }
 
+        if (data.startsWith('antiwarn_')) {
+            return deps.admin.handleAntilinkActionCallback(query);
+        }
+
         if (data.startsWith('verify_')) {
             return deps.admin.handleVerifyCallback(query);
         }

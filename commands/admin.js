@@ -1037,5 +1037,43 @@ module.exports = function (bot, deps) {
     }
   }
 
-  deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback };
+  async function handleAntilinkActionCallback(query) {
+    const chatId = query.message.chat.id.toString();
+    const data = query.data;
+    const clickerId = query.from.id;
+
+    try {
+      const clicker = await bot.getChatMember(chatId, clickerId);
+      const isOwner = botOWNER_IDS.includes(clickerId);
+      const isAdmin = ["creator", "administrator"].includes(clicker.status) || isOwner;
+
+      if (!isAdmin) return bot.answerCallbackQuery(query.id, { text: "❌ Admins only.", show_alert: true });
+
+      const parts = data.split('_');
+      const action = parts[1]; // remove, restrict, unmute
+      const targetId = parts[2];
+
+      if (action === 'remove') {
+        await deps.AntilinkWarning.deleteOne({ groupId: chatId, userId: targetId });
+        bot.answerCallbackQuery(query.id, { text: "✅ Warning removed." });
+        bot.editMessageText(`✅ Warning removed for [user](tg://user?id=${targetId}) by admin.`, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown' });
+      } else if (action === 'restrict') {
+        const settings = await deps.Antilink.findOne({ groupId: chatId }) || { restrictTime: 60 };
+        const until = Math.floor(Date.now() / 1000) + (settings.restrictTime * 60);
+        await bot.restrictChatMember(chatId, targetId, { can_send_messages: false, until_date: until });
+        bot.answerCallbackQuery(query.id, { text: "✅ Restricted." });
+        bot.editMessageText(`🚫 User [${targetId}](tg://user?id=${targetId}) restricted by admin.`, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown' });
+      } else if (action === 'unmute') {
+        const chat = await bot.getChat(chatId);
+        await bot.restrictChatMember(chatId, targetId, chat.permissions || { can_send_messages: true });
+        bot.answerCallbackQuery(query.id, { text: "✅ Unmuted." });
+        bot.editMessageText(`🔓 User [${targetId}](tg://user?id=${targetId}) unmuted by admin.`, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown' });
+      }
+    } catch (err) {
+      console.error(err);
+      bot.answerCallbackQuery(query.id, { text: "❌ Error occurred.", show_alert: true });
+    }
+  }
+
+  deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback, handleAntilinkActionCallback };
 };

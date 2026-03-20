@@ -121,14 +121,32 @@ module.exports = function (bot, deps) {
                                 await deps.AntilinkWarning.deleteOne({ groupId: chatId, userId });
                                 const until = Math.floor(Date.now() / 1000) + (antilinkSettings.restrictAfterMaxWarns * 60);
                                 await bot.restrictChatMember(chatId, userId, { can_send_messages: false, until_date: until });
-                                bot.sendMessage(chatId, `🚫 [${msg.from.first_name}](tg://user?id=${userId}) restricted for ${antilinkSettings.restrictAfterMaxWarns}m (Max Warnings).`, { parse_mode: 'Markdown' });
+                                bot.sendMessage(chatId, `🚫 [${msg.from.first_name}](tg://user?id=${userId}) restricted for ${antilinkSettings.restrictAfterMaxWarns}m (Max Warnings).`, {
+                                    parse_mode: 'Markdown',
+                                    reply_markup: {
+                                        inline_keyboard: [[{ text: "🔓 Unmute", callback_data: `antiwarn_unmute_${userId}` }]]
+                                    }
+                                });
                             } else {
-                                bot.sendMessage(chatId, `⚠️ [${msg.from.first_name}](tg://user?id=${userId}), No links allowed! (${warns.count}/${antilinkSettings.warnLimit})`, { parse_mode: 'Markdown' });
+                                bot.sendMessage(chatId, `⚠️ [${msg.from.first_name}](tg://user?id=${userId}), No links allowed! (${warns.count}/${antilinkSettings.warnLimit})`, {
+                                    parse_mode: 'Markdown',
+                                    reply_markup: {
+                                        inline_keyboard: [[
+                                            { text: "🗑️ RemWarn", callback_data: `antiwarn_remove_${userId}` },
+                                            { text: "🚫 Restrict", callback_data: `antiwarn_restrict_${userId}` }
+                                        ]]
+                                    }
+                                });
                             }
                         } else if (antilinkSettings.action === 'restrict') {
                             const until = Math.floor(Date.now() / 1000) + (antilinkSettings.restrictTime * 60);
                             await bot.restrictChatMember(chatId, userId, { can_send_messages: false, until_date: until });
-                            bot.sendMessage(chatId, `🚫 [${msg.from.first_name}](tg://user?id=${userId}) restricted for ${antilinkSettings.restrictTime}m for sending a link.`, { parse_mode: 'Markdown' });
+                            bot.sendMessage(chatId, `🚫 [${msg.from.first_name}](tg://user?id=${userId}) restricted for ${antilinkSettings.restrictTime}m for sending a link.`, {
+                                parse_mode: 'Markdown',
+                                reply_markup: {
+                                    inline_keyboard: [[{ text: "🔓 Unmute", callback_data: `antiwarn_unmute_${userId}` }]]
+                                }
+                            });
                         }
                         return;
                     }

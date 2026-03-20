@@ -711,7 +711,7 @@ module.exports = function (bot, deps) {
         }
       }
 
-      const sessionData = fs.readFileSync("session.txt", "utf8").trim();
+      const sessionData = fs.readFileSync("session.txt", "utf8").trim() || process.env.SESSION_STRING;
       const client = new TelegramClient(new StringSession(sessionData), process.env.API_ID, process.env.API_HASH, { connectionRetries: 5, receiveUpdates: false });
       await client.connect();
 

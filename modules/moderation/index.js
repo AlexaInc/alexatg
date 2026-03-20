@@ -69,34 +69,36 @@ module.exports = function (bot, deps) {
     // ====== Message Interceptor for Invite Check ======
     bot.on('message', async (msg) => {
         try {
-            if (!msg.text || msg.text.startsWith('/') || msg.text.startsWith('!')) return;
+            const text = msg.text || msg.caption || "";
+            if (!text || text.startsWith('/') || text.startsWith('!')) return;
             const chatId = msg.chat.id;
             const userId = msg.from.id;
 
             // --- Antilink Check ---
-            const antilinkSettings = await deps.Antilink.findOne({ groupId: chatId });
+            const antilinkSettings = await deps.Antilink.findOne({ groupId: String(chatId) });
             if (antilinkSettings?.enabled) {
                 const LINK_PATTERNS = {
                     tg: /(t\.me|telegram\.me|telegram\.dog)\/[a-zA-Z0-9_]{5,}/i,
                     fb: /(facebook\.com|fb\.watch|fb\.me)\//i,
                     yt: /(youtube\.com|youtu\.be)\//i,
-                    all: /https?:\/\/[^\s]+/i
+                    all: /https?:\/\/[^\s]+/i // Catch-all regex as fallback
                 };
 
-                let hasLink = false;
-                const text = msg.text || msg.caption || "";
+                const entities = msg.entities || msg.caption_entities || [];
+                let hasLink = entities.some(e => ['url', 'text_link'].includes(e.type));
 
-                if (antilinkSettings.types.all) {
-                    hasLink = LINK_PATTERNS.all.test(text);
-                } else {
-                    if (antilinkSettings.types.tg && LINK_PATTERNS.tg.test(text)) hasLink = true;
-                    if (antilinkSettings.types.fb && LINK_PATTERNS.fb.test(text)) hasLink = true;
-                    if (antilinkSettings.types.yt && LINK_PATTERNS.yt.test(text)) hasLink = true;
-                    if (antilinkSettings.types.other && !hasLink) {
-                        if (LINK_PATTERNS.all.test(text) && !LINK_PATTERNS.tg.test(text) && !LINK_PATTERNS.fb.test(text) && !LINK_PATTERNS.yt.test(text)) {
-                            hasLink = true;
+                if (hasLink && !antilinkSettings.types.all) {
+                    // Refine check based on selected types
+                    let matchesType = false;
+                    if (antilinkSettings.types.tg && LINK_PATTERNS.tg.test(text)) matchesType = true;
+                    if (antilinkSettings.types.fb && LINK_PATTERNS.fb.test(text)) matchesType = true;
+                    if (antilinkSettings.types.yt && LINK_PATTERNS.yt.test(text)) matchesType = true;
+                    if (antilinkSettings.types.other && !matchesType) {
+                        if (!LINK_PATTERNS.tg.test(text) && !LINK_PATTERNS.fb.test(text) && !LINK_PATTERNS.yt.test(text)) {
+                            matchesType = true;
                         }
                     }
+                    hasLink = matchesType;
                 }
 
                 if (hasLink) {

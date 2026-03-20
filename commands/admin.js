@@ -952,6 +952,7 @@ module.exports = function (bot, deps) {
       `**Restrict:** \`${settings.restrictTime} min\`\n` +
       `**Warn Limit:** \`${settings.warnLimit}\`\n` +
       `**Max-Warn Restrict:** \`${settings.restrictAfterMaxWarns} min\`\n\n` +
+      `⚠️ **Note:** Admins are exempt from antilink rules.\n\n` +
       `Configure the arrangement below:`;
 
     const keyboard = {

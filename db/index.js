@@ -9,6 +9,7 @@ const NSFWSetting = require('./models/nsfw');
 const accceptMap = require('./models/accept');
 const Antilink = require('./models/antilink');
 const AntilinkWarning = require('./models/antilinkWarnings');
+const Warning = require('./models/warning');
 
 let secondaryDb = null;
 let CustomQuizModel = null;
@@ -45,6 +46,7 @@ module.exports = {
   accceptMap,
   Antilink,
   AntilinkWarning,
+  Warning,
   getCustomQuizModel: () => CustomQuizModel,
   getUserQuizScoreModel: () => UserQuizScoreModel
 };

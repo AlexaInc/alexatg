@@ -1075,5 +1075,85 @@ module.exports = function (bot, deps) {
     }
   }
 
-  deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback, handleAntilinkActionCallback };
+  // --- WARN COMMAND ---
+  bot.onText(/^\/warn/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const args = (msg.text || '').split(' ').slice(1);
+
+    try {
+      const caller = await bot.getChatMember(chatId, userId);
+      const isOwner = botOWNER_IDS.includes(userId);
+      const isAdmin = ["creator", "administrator"].includes(caller.status) || isOwner;
+
+      if (!isAdmin) return bot.sendMessage(chatId, "❌ Only admins can warn users.");
+
+      const { targetUserId, targetUserName, error } = await handlers.getTarget(bot, UserMap, msg, args);
+      if (error) return bot.sendMessage(chatId, error);
+
+      // Staff Protection
+      const targetMember = await bot.getChatMember(chatId, targetUserId);
+      const isTargetStaff = ["administrator", "creator"].includes(targetMember.status) || botOWNER_IDS.includes(targetUserId);
+      if (isTargetStaff) return bot.sendMessage(chatId, "⚠️ Warning staff is not allowed.");
+
+      const warning = await deps.Warning.findOneAndUpdate(
+        { groupId: chatId, userId: targetUserId },
+        { $inc: { count: 1 } },
+        { upsert: true, new: true }
+      );
+
+      if (warning.count >= 5) {
+        await deps.Warning.deleteOne({ groupId: chatId, userId: targetUserId });
+        const until = Math.floor(Date.now() / 1000) + (60 * 60); // 1 hour
+        await bot.restrictChatMember(chatId, targetUserId, { can_send_messages: false, until_date: until });
+
+        bot.sendMessage(chatId, `🚫 [${targetUserName}](tg://user?id=${targetUserId}) has been restricted for reaching 5 warnings.`, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "🔓 Unmute", callback_data: `genwarn_unmute_${targetUserId}` },
+              { text: "🚫 Ban", callback_data: `genwarn_ban_${targetUserId}` }
+            ]]
+          }
+        });
+      } else {
+        bot.sendMessage(chatId, `⚠️ [${targetUserName}](tg://user?id=${targetUserId}) has been warned! (${warning.count}/5).`, { parse_mode: 'Markdown' });
+      }
+    } catch (err) {
+      bot.sendMessage(chatId, "❌ Failed to warn user.");
+    }
+  });
+
+  async function handleGenericWarnCallback(query) {
+    const chatId = query.message.chat.id.toString();
+    const data = query.data;
+    const clickerId = query.from.id;
+
+    try {
+      const clicker = await bot.getChatMember(chatId, clickerId);
+      const isOwner = botOWNER_IDS.includes(clickerId);
+      const isAdmin = ["creator", "administrator"].includes(clicker.status) || isOwner;
+      if (!isAdmin) return bot.answerCallbackQuery(query.id, { text: "❌ Admins only.", show_alert: true });
+
+      const parts = data.split('_');
+      const action = parts[1]; // unmute, ban
+      const targetId = parts[2];
+
+      if (action === 'unmute') {
+        const chat = await bot.getChat(chatId);
+        await bot.restrictChatMember(chatId, targetId, chat.permissions || { can_send_messages: true });
+        await deps.Warning.deleteOne({ groupId: chatId, userId: targetId });
+        bot.answerCallbackQuery(query.id, { text: "🔓 Unmuted and warnings cleared!" });
+        bot.editMessageText(`🔓 User [${targetId}](tg://user?id=${targetId}) unmuted by admin. Warnings reset.`, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown' });
+      } else if (action === 'ban') {
+        await bot.banChatMember(chatId, targetId);
+        bot.answerCallbackQuery(query.id, { text: "🚫 User Banned!" });
+        bot.editMessageText(`🚫 User banned by admin.`, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown' });
+      }
+    } catch (e) {
+      bot.answerCallbackQuery(query.id, { text: "❌ Action failed." });
+    }
+  }
+
+  deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback, handleAntilinkActionCallback, handleGenericWarnCallback };
 };

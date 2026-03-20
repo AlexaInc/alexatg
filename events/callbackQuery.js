@@ -33,6 +33,10 @@ module.exports = function (bot, deps) {
             return deps.admin.handleAntilinkActionCallback(query);
         }
 
+        if (data.startsWith('genwarn_')) {
+            return deps.admin.handleGenericWarnCallback(query);
+        }
+
         if (data.startsWith('verify_')) {
             return deps.admin.handleVerifyCallback(query);
         }

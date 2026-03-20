@@ -273,6 +273,37 @@ module.exports = function (bot, deps) {
     }
   });
 
+  // --- /quiz Trigger (Quiz) ---
+  bot.onText(/^\/quiz(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const quizId = match[1];
+
+    try {
+      const caller = await bot.getChatMember(chatId, userId);
+      const isOwner = botOWNER_IDS.includes(userId);
+      const canManageQuiz = caller.status === 'creator' || caller.can_change_info || isOwner;
+
+      if (!canManageQuiz) {
+        return bot.sendMessage(chatId, "❌ You don't have the 'Change Group Info' permission.");
+      }
+
+      if (quizId) {
+        // Fetch custom quiz from DB
+        if (!deps.CustomQuizModel) return bot.sendMessage(chatId, "❌ Custom quizzes are not available (DB not connected).");
+        const quizData = await deps.CustomQuizModel.findOne({ quizId: quizId.toUpperCase() });
+        if (!quizData) return bot.sendMessage(chatId, "❌ Quiz ID not found.");
+        deps.quiz.startQuiz(chatId, quizData);
+      } else {
+        // Start default quiz
+        deps.quiz.startQuiz(chatId);
+      }
+    } catch (err) {
+      console.error("Quiz perm error:", err);
+      bot.sendMessage(chatId, "❌ This command is restricted to admins with 'Change Group Info' permission.");
+    }
+  });
+
   // --- FILTERS COMMAND ---
   bot.onText(/^\/filters/, async (msg) => {
     const allFilters = deps.Filters.getFilters(String(msg.chat.id));
@@ -887,5 +918,123 @@ module.exports = function (bot, deps) {
     }
   }
 
-  deps.admin = { handleUnmaskCallback, handleVerifyCallback };
+  // --- ANTILINK COMMAND ---
+  bot.onText(/^\/antilink/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    try {
+      const caller = await bot.getChatMember(chatId, userId);
+      const isOwner = botOWNER_IDS.includes(userId);
+      const isAdmin = ["creator", "administrator"].includes(caller.status) || isOwner;
+
+      if (!isAdmin) return bot.sendMessage(chatId, "❌ Only admins can manage antilink.");
+
+      let settings = await deps.Antilink.findOne({ groupId: chatId });
+      if (!settings) {
+        settings = new deps.Antilink({ groupId: chatId });
+        await settings.save();
+      }
+
+      await sendAntilinkSettings(chatId, settings);
+    } catch (err) {
+      console.error(err);
+      bot.sendMessage(chatId, "❌ Error loading antilink settings.");
+    }
+  });
+
+  async function sendAntilinkSettings(chatId, settings, messageId = null) {
+    const statusText = settings.enabled ? "🟢 Antilink is ENABLED" : "🔴 Antilink is DISABLED";
+    const actionText = settings.action.toUpperCase();
+
+    const text = `${statusText}\n\n` +
+      `**Action:** \`${actionText}\`\n` +
+      `**Restrict:** \`${settings.restrictTime} min\`\n` +
+      `**Warn Limit:** \`${settings.warnLimit}\`\n` +
+      `**Max-Warn Restrict:** \`${settings.restrictAfterMaxWarns} min\`\n\n` +
+      `Configure the arrangement below:`;
+
+    const keyboard = {
+      inline_keyboard: [
+        // Row 1: Trigger
+        [{ text: `ANTILINK Status: ${settings.enabled ? "✅ ON" : "❌ OFF"}`, callback_data: `antilink_toggle` }],
+        // Row 2: Actions
+        [
+          { text: `${settings.action === 'restrict' ? '🔘' : '⚪'} Restrict`, callback_data: `antilink_action_restrict` },
+          { text: `${settings.action === 'warn' ? '🔘' : '⚪'} Warn`, callback_data: `antilink_action_warn` },
+          { text: `${settings.action === 'delete' ? '🔘' : '⚪'} Delete`, callback_data: `antilink_action_delete` }
+        ],
+        // Row 3: Adjustments
+        [
+          { text: `⏰ ${settings.restrictTime}m -/+`, callback_data: `none` },
+          { text: `🔽`, callback_data: `antilink_adj_rest_-5` },
+          { text: `🔼`, callback_data: `antilink_adj_rest_5` },
+          { text: `⚠️ ${settings.warnLimit}w -/+`, callback_data: `none` },
+          { text: `🔽`, callback_data: `antilink_adj_warn_-1` },
+          { text: `🔼`, callback_data: `antilink_adj_warn_1` }
+        ],
+        [
+          { text: `🚫 Max-Rest: ${settings.restrictAfterMaxWarns}m`, callback_data: `none` },
+          { text: `➖`, callback_data: `antilink_adj_mrest_-10` },
+          { text: `➕`, callback_data: `antilink_adj_mrest_10` }
+        ],
+        // Row 4: Link Types
+        [
+          { text: `${settings.types.tg ? '✅' : '❌'} TG`, callback_data: `antilink_type_tg` },
+          { text: `${settings.types.fb ? '✅' : '❌'} FB`, callback_data: `antilink_type_fb` },
+          { text: `${settings.types.yt ? '✅' : '❌'} YT`, callback_data: `antilink_type_yt` },
+          { text: `${settings.types.other ? '✅' : '❌'} OTHER`, callback_data: `antilink_type_other` },
+          { text: `${settings.types.all ? '✅' : '❌'} ALL`, callback_data: `antilink_type_all` }
+        ]
+      ]
+    };
+
+    if (messageId) {
+      await bot.editMessageText(text, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: keyboard }).catch(() => { });
+    } else {
+      await bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    }
+  }
+
+  async function handleAntilinkCallback(query) {
+    const chatId = query.message.chat.id.toString();
+    const data = query.data;
+    const userId = query.from.id;
+
+    try {
+      const caller = await bot.getChatMember(chatId, userId);
+      const isOwner = botOWNER_IDS.includes(userId);
+      const isAdmin = ["creator", "administrator"].includes(caller.status) || isOwner;
+
+      if (!isAdmin) return bot.answerCallbackQuery(query.id, { text: "❌ Only admins can manage settings.", show_alert: true });
+
+      let settings = await deps.Antilink.findOne({ groupId: chatId });
+      if (!settings) settings = new deps.Antilink({ groupId: chatId });
+
+      if (data === 'antilink_toggle') {
+        settings.enabled = !settings.enabled;
+      } else if (data.startsWith('antilink_action_')) {
+        settings.action = data.replace('antilink_action_', '');
+      } else if (data.startsWith('antilink_type_')) {
+        const type = data.replace('antilink_type_', '');
+        settings.types[type] = !settings.types[type];
+      } else if (data.startsWith('antilink_adj_')) {
+        const parts = data.split('_');
+        const key = parts[2];
+        const val = parseInt(parts[3]);
+        if (key === 'rest') settings.restrictTime = Math.max(1, settings.restrictTime + val);
+        else if (key === 'warn') settings.warnLimit = Math.max(1, settings.warnLimit + val);
+        else if (key === 'mrest') settings.restrictAfterMaxWarns = Math.max(1, settings.restrictAfterMaxWarns + val);
+      }
+
+      await settings.save();
+      await sendAntilinkSettings(chatId, settings, query.message.message_id);
+      bot.answerCallbackQuery(query.id, { text: "Updated!" });
+    } catch (err) {
+      console.error(err);
+      bot.answerCallbackQuery(query.id, { text: "An error occurred." });
+    }
+  }
+
+  deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback };
 };

@@ -25,6 +25,10 @@ module.exports = function (bot, deps) {
             return deps.admin.handleUnmaskCallback(query);
         }
 
+        if (data.startsWith('antilink_')) {
+            return deps.admin.handleAntilinkCallback(query);
+        }
+
         if (data.startsWith('verify_')) {
             return deps.admin.handleVerifyCallback(query);
         }

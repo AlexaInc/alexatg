@@ -73,6 +73,66 @@ module.exports = function (bot, deps) {
             const chatId = msg.chat.id;
             const userId = msg.from.id;
 
+            // --- Antilink Check ---
+            const antilinkSettings = await deps.Antilink.findOne({ groupId: chatId });
+            if (antilinkSettings?.enabled) {
+                const LINK_PATTERNS = {
+                    tg: /(t\.me|telegram\.me|telegram\.dog)\/[a-zA-Z0-9_]{5,}/i,
+                    fb: /(facebook\.com|fb\.watch|fb\.me)\//i,
+                    yt: /(youtube\.com|youtu\.be)\//i,
+                    all: /https?:\/\/[^\s]+/i
+                };
+
+                let hasLink = false;
+                const text = msg.text || msg.caption || "";
+
+                if (antilinkSettings.types.all) {
+                    hasLink = LINK_PATTERNS.all.test(text);
+                } else {
+                    if (antilinkSettings.types.tg && LINK_PATTERNS.tg.test(text)) hasLink = true;
+                    if (antilinkSettings.types.fb && LINK_PATTERNS.fb.test(text)) hasLink = true;
+                    if (antilinkSettings.types.yt && LINK_PATTERNS.yt.test(text)) hasLink = true;
+                    if (antilinkSettings.types.other && !hasLink) {
+                        if (LINK_PATTERNS.all.test(text) && !LINK_PATTERNS.tg.test(text) && !LINK_PATTERNS.fb.test(text) && !LINK_PATTERNS.yt.test(text)) {
+                            hasLink = true;
+                        }
+                    }
+                }
+
+                if (hasLink) {
+                    const clicker = await bot.getChatMember(chatId, userId).catch(() => ({ status: 'member' }));
+                    const isAdmin = ["administrator", "creator"].includes(clicker.status) || botOWNER_IDS.includes(userId);
+
+                    if (!isAdmin) {
+                        if (['delete', 'warn', 'restrict'].includes(antilinkSettings.action)) {
+                            bot.deleteMessage(chatId, msg.message_id).catch(() => { });
+                        }
+
+                        if (antilinkSettings.action === 'warn') {
+                            const warns = await deps.AntilinkWarning.findOneAndUpdate(
+                                { groupId: chatId, userId },
+                                { $inc: { count: 1 } },
+                                { upsert: true, new: true }
+                            );
+
+                            if (warns.count >= antilinkSettings.warnLimit) {
+                                await deps.AntilinkWarning.deleteOne({ groupId: chatId, userId });
+                                const until = Math.floor(Date.now() / 1000) + (antilinkSettings.restrictAfterMaxWarns * 60);
+                                await bot.restrictChatMember(chatId, userId, { can_send_messages: false, until_date: until });
+                                bot.sendMessage(chatId, `🚫 [${msg.from.first_name}](tg://user?id=${userId}) restricted for ${antilinkSettings.restrictAfterMaxWarns}m (Max Warnings).`, { parse_mode: 'Markdown' });
+                            } else {
+                                bot.sendMessage(chatId, `⚠️ [${msg.from.first_name}](tg://user?id=${userId}), No links allowed! (${warns.count}/${antilinkSettings.warnLimit})`, { parse_mode: 'Markdown' });
+                            }
+                        } else if (antilinkSettings.action === 'restrict') {
+                            const until = Math.floor(Date.now() / 1000) + (antilinkSettings.restrictTime * 60);
+                            await bot.restrictChatMember(chatId, userId, { can_send_messages: false, until_date: until });
+                            bot.sendMessage(chatId, `🚫 [${msg.from.first_name}](tg://user?id=${userId}) restricted for ${antilinkSettings.restrictTime}m for sending a link.`, { parse_mode: 'Markdown' });
+                        }
+                        return;
+                    }
+                }
+            }
+
             const clicker = await bot.getChatMember(chatId, userId).catch(() => ({ status: 'member' }));
             if (["administrator", "creator"].includes(clicker.status) || msg.from.is_bot) return;
 

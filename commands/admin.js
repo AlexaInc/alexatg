@@ -1117,7 +1117,15 @@ module.exports = function (bot, deps) {
           }
         });
       } else {
-        bot.sendMessage(chatId, `⚠️ [${targetUserName}](tg://user?id=${targetUserId}) has been warned! (${warning.count}/5).`, { parse_mode: 'Markdown' });
+        bot.sendMessage(chatId, `⚠️ [${targetUserName}](tg://user?id=${targetUserId}) has been warned! (${warning.count}/5).`, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "🗑️ RemWarn", callback_data: `genwarn_remone_${targetUserId}` },
+              { text: "🔄 Reset", callback_data: `genwarn_reset_${targetUserId}` }
+            ]]
+          }
+        });
       }
     } catch (err) {
       bot.sendMessage(chatId, "❌ Failed to warn user.");
@@ -1136,7 +1144,7 @@ module.exports = function (bot, deps) {
       if (!isAdmin) return bot.answerCallbackQuery(query.id, { text: "❌ Admins only.", show_alert: true });
 
       const parts = data.split('_');
-      const action = parts[1]; // unmute, ban
+      const action = parts[1]; // unmute, ban, remone, reset
       const targetId = parts[2];
 
       if (action === 'unmute') {
@@ -1149,6 +1157,21 @@ module.exports = function (bot, deps) {
         await bot.banChatMember(chatId, targetId);
         bot.answerCallbackQuery(query.id, { text: "🚫 User Banned!" });
         bot.editMessageText(`🚫 User banned by admin.`, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown' });
+      } else if (action === 'remone') {
+        const w = await deps.Warning.findOneAndUpdate(
+          { groupId: chatId, userId: targetId },
+          { $inc: { count: -1 } },
+          { new: true }
+        );
+        if (w && w.count < 0) {
+          await deps.Warning.deleteOne({ groupId: chatId, userId: targetId });
+        }
+        bot.answerCallbackQuery(query.id, { text: "✅ Removed 1 warning." });
+        bot.editMessageText(`✅ One warning removed for [user](tg://user?id=${targetId}).`, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown' });
+      } else if (action === 'reset') {
+        await deps.Warning.deleteOne({ groupId: chatId, userId: targetId });
+        bot.answerCallbackQuery(query.id, { text: "✅ Warnings reset." });
+        bot.editMessageText(`🔄 All warnings reset for [user](tg://user?id=${targetId}).`, { chat_id: chatId, message_id: query.message.message_id, parse_mode: 'Markdown' });
       }
     } catch (e) {
       bot.answerCallbackQuery(query.id, { text: "❌ Action failed." });

@@ -11,7 +11,7 @@ const helpers = require('./utils/helpers');
 const { loadGroupIds, saveGroupIds, saveUserIds, loadUserIds } = require('./utils/storage');
 const { updateUserCount_Optimized, checkUserCount, updateUserLimit } = require('./utils/aiLimit');
 const db = require('./db/index');
-const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning } = db;
+const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning, BroadcastId } = db;
 
 // --- CONFIG ---
 const BOT_TOKEN = process.env.BOT_TOKEN;

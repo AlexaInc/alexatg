@@ -131,58 +131,84 @@ module.exports = function (bot, deps) {
     }
   });
 
-  // --- PROMOTE COMMAND ---
+  // --- NEW PROM COMMAND (Interactive - Version 2 with ALL perms) ---
+  const PROM_PERMS = [
+    { code: 'i', label: 'Change Info', key: 'can_change_info' },
+    { code: 'e', label: 'Delete Msgs', key: 'can_delete_messages' },
+    { code: 'j', label: 'Invite Users', key: 'can_invite_users' },
+    { code: 'g', label: 'Restrict Members', key: 'can_restrict_members' },
+    { code: 'k', label: 'Pin Messages', key: 'can_pin_messages' },
+    { code: 'h', label: 'Add New Admins', key: 'can_promote_members' },
+    { code: 'f', label: 'Manage VC', key: 'can_manage_video_chats' },
+    { code: 'a', label: 'Anonymous', key: 'is_anonymous' },
+    { code: 'b', label: 'Manage Chat', key: 'can_manage_chat' },
+    { code: 'c', label: 'Post (Chan)', key: 'can_post_messages' },
+    { code: 'd', label: 'Edit (Chan)', key: 'can_edit_messages' },
+    { code: 'l', label: 'Manage Topics', key: 'can_manage_topics' },
+    { code: 'm', label: 'Post Stories', key: 'can_post_stories' },
+    { code: 'n', label: 'Edit Stories', key: 'can_edit_stories' },
+    { code: 'o', label: 'Delete Stories', key: 'can_delete_stories' }
+  ];
+
+  function getPromKeyboard(targetId, selectedCodes = []) {
+    const rows = [];
+    const COLUMNS = 3;
+    for (let i = 0; i < PROM_PERMS.length; i += COLUMNS) {
+      const row = [];
+      const chunk = PROM_PERMS.slice(i, i + COLUMNS);
+      chunk.forEach(p => {
+        const isSelected = selectedCodes.includes(p.code);
+        const text = `${isSelected ? '✅' : '❌'} ${p.label}`;
+        let nextCodes;
+        if (isSelected) nextCodes = selectedCodes.filter(c => c !== p.code);
+        else nextCodes = [...selectedCodes, p.code];
+
+        const data = `prom_tgl_${targetId}_${nextCodes.join(',')}`;
+        row.push({ text, callback_data: data.substring(0, 64) });
+      });
+      rows.push(row);
+    }
+    // Add Done button
+    rows.push([{ text: '✅ Done - Promote User', callback_data: `prom_done_${targetId}_${selectedCodes.join(',')}`.substring(0, 64) }]);
+    return { inline_keyboard: rows };
+  }
 
   bot.onText(/^\/prom/, async (msg) => {
+    // Ignore /promme
     if (msg.text && msg.text.toLowerCase().startsWith('/promme')) return;
 
-    const text = msg.text || '';
-    const command = text.split(' ')[0].toLowerCase();
-    const args = text.substring(command.length).trim().toLowerCase().split(/\s+/).filter(Boolean);
     const chatId = msg.chat.id;
+    const userId = msg.from.id;
 
-    if (!msg.reply_to_message) return bot.sendMessage(chatId, "Please reply to the user you want to promote.");
-    if (args.length === 0) return bot.sendMessage(chatId, "Please provide permissions (e.g., 'full', 'ban', 'pin', 'del', 'info', 'invite', 'promote').");
+    if (!msg.reply_to_message) return bot.sendMessage(chatId, "⚠️ Please reply to the user you want to promote.");
 
     try {
-      const caller = await bot.getChatMember(chatId, msg.from.id);
-      const isOwner = botOWNER_IDS.includes(msg.from.id);
+      const caller = await bot.getChatMember(chatId, userId);
+      const isOwner = botOWNER_IDS.includes(userId);
       const canPromote = caller.status === 'creator' || caller.can_promote_members || isOwner;
 
-      const userToPromote = msg.reply_to_message.from;
-      const userToPromotename = userToPromote.first_name || '';
-
-      if (await handleAnonymous(bot, msg, "prom", userToPromote.id, userToPromotename, args.join('|'))) return;
       if (!canPromote) return bot.sendMessage(chatId, "❌ You don't have the 'Add New Admins' permission.");
 
-      const targetStatus = await bot.getChatMember(chatId, userToPromote.id);
-      if (["administrator", "creator"].includes(targetStatus.status)) return bot.sendMessage(chatId, "User is already admin.");
+      const targetUser = msg.reply_to_message.from;
+      const targetName = targetUser.first_name || 'User';
 
-      const me = await bot.getMe();
-      const botMember = await bot.getChatMember(chatId, me.id);
+      const targetStatus = await bot.getChatMember(chatId, targetUser.id);
+      if (["administrator", "creator"].includes(targetStatus.status)) return bot.sendMessage(chatId, `⚠️ [${targetName}](tg://user?id=${targetUser.id}) is already an admin.`, { parse_mode: 'Markdown' });
 
-      let idealPerms = {
-        can_change_info: args.includes('info') || args.includes('full'),
-        can_delete_messages: args.includes('del') || args.includes('ban') || args.includes('full'),
-        can_invite_users: args.includes('invite') || args.includes('full'),
-        can_restrict_members: args.includes('ban') || args.includes('full'),
-        can_pin_messages: args.includes('pin') || args.includes('full'),
-        can_promote_members: args.includes('promote') || args.includes('full'),
-        can_manage_video_chats: args.includes('full'),
-        is_anonymous: args.includes('anno')
-      };
+      // Default selected perms (e.g., info, del, invite, restrict, pin)
+      // i:info, e:delete, j:invite, g:restrict, k:pin
+      const defaultCodes = ['i', 'e', 'j', 'g', 'k'];
 
-      const finalPerms = {};
-      Object.keys(idealPerms).forEach(key => {
-        finalPerms[key] = idealPerms[key] && botMember[key];
+      const welcomeText = `🛡️ **Admin Promotion**\n\nTarget: [${targetName}](tg://user?id=${targetUser.id})\n\nSelect the permissions you want to grant:`;
+
+      await bot.sendMessage(chatId, welcomeText, {
+        parse_mode: 'Markdown',
+        reply_markup: getPromKeyboard(targetUser.id, defaultCodes)
       });
-
-      await bot.promoteChatMember(chatId, userToPromote.id, finalPerms);
-      bot.sendMessage(chatId, `✅ [${userToPromotename}](tg://user?id=${userToPromote.id}) has been promoted.`, { parse_mode: "Markdown" });
 
     } catch (error) {
       console.error(error);
-      bot.sendMessage(chatId, "❌ Promotion failed. Ensure I have 'Add New Admins' rights.");
+      bot.sendMessage(chatId, "❌ An error occurred.");
     }
   });
 
@@ -1178,5 +1204,61 @@ module.exports = function (bot, deps) {
     }
   }
 
-  deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback, handleAntilinkActionCallback, handleGenericWarnCallback };
+  async function handlePromoteCallback(query) {
+    const chatId = query.message.chat.id.toString();
+    const data = query.data;
+    const clickerId = query.from.id;
+
+    try {
+      const clicker = await bot.getChatMember(chatId, clickerId);
+      const isOwner = botOWNER_IDS.includes(clickerId);
+      const canPromote = ["creator", "administrator"].includes(clicker.status) && (clicker.status === 'creator' || clicker.can_promote_members) || isOwner;
+
+      if (!canPromote) return bot.answerCallbackQuery(query.id, { text: "❌ You don't have permission to promote members.", show_alert: true });
+
+      const parts = data.split('_');
+      const action = parts[1]; // tgl or done
+      const targetId = parts[2];
+      const selectedCodes = parts[3] ? parts[3].split(',') : [];
+
+      if (action === 'tgl') {
+        await bot.editMessageReplyMarkup(getPromKeyboard(targetId, selectedCodes), {
+          chat_id: chatId,
+          message_id: query.message.message_id
+        }).catch(() => { });
+        bot.answerCallbackQuery(query.id);
+      } else if (action === 'done') {
+        const me = await bot.getMe();
+        const botMember = await bot.getChatMember(chatId, me.id);
+
+        const finalPerms = {};
+        PROM_PERMS.forEach(p => {
+          const isSelected = selectedCodes.includes(p.code);
+          // Only grant if bot has the right
+          finalPerms[p.key] = isSelected && (botMember.status === 'creator' || botMember[p.key]);
+        });
+
+        await bot.promoteChatMember(chatId, targetId, finalPerms);
+
+        // Sync these IDs to Broadcast DB as requested
+        await deps.BroadcastId.updateOne({ chatId: chatId }, { $set: { type: query.message.chat.type } }, { upsert: true }).catch(() => { });
+        await deps.BroadcastId.updateOne({ chatId: targetId }, { $set: { type: 'private' } }, { upsert: true }).catch(() => { });
+
+        const targetMember = await bot.getChatMember(chatId, targetId);
+        const targetName = targetMember.user.first_name || 'User';
+
+        bot.editMessageText(`✅ [${targetName}](tg://user?id=${targetId}) has been promoted with selected permissions.`, {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          parse_mode: 'Markdown'
+        });
+        bot.answerCallbackQuery(query.id, { text: "Promotion Successful!" });
+      }
+    } catch (err) {
+      console.error(err);
+      bot.answerCallbackQuery(query.id, { text: "❌ Promotion failed. Ensure I have sufficient rights.", show_alert: true });
+    }
+  }
+
+  deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback, handleAntilinkActionCallback, handleGenericWarnCallback, handlePromoteCallback };
 };

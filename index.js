@@ -144,6 +144,7 @@ const deps = {
   Antilink,
   AntilinkWarning,
   Warning,
+  BroadcastId,
   get CustomQuizModel() { return db.getCustomQuizModel(); },
   get UserQuizScoreModel() { return db.getUserQuizScoreModel(); },
   groupChatIds: loadGroupIds(),
@@ -181,27 +182,45 @@ deps.handleDatingState = datingModule.handleDatingState;
 require('./events/callbackQuery')(bot, deps);
 require('./modules/moderation')(bot, deps);
 
-// --- GLOBAL MESSAGE HANDLER (Persistent State) ---
+// --- GLOBAL MESSAGE HANDLER (Persistent State & Broadcast Sync) ---
 bot.on('message', async (msg) => {
-  const chatId = msg.chat.id;
-  const isPrivate = msg.chat.type === 'private';
+  const chatId = msg.chat.id.toString();
+  const chatType = msg.chat.type;
+  const isPrivate = chatType === 'private';
+
   try {
-    await deps.saveUserMap(chatId, msg.from);
+    await deps.saveUserMap(msg.chat.id, msg.from);
+
+    // Check local Sets for fast response
+    let isNew = false;
     if (isPrivate) {
-      if (!deps.userChatIds.has(chatId)) {
-        deps.userChatIds.add(chatId);
-        saveUserIds();
-      }
-      // Route to dating state machine if active
-      if (deps.handleDatingState) {
-        const handled = await deps.handleDatingState(msg);
-        if (handled) return;
+      if (!deps.userChatIds.has(msg.chat.id)) {
+        deps.userChatIds.add(msg.chat.id);
+        deps.saveUserIds(deps.userChatIds);
+        isNew = true;
       }
     } else {
-      if (!deps.groupChatIds.has(chatId)) {
-        deps.groupChatIds.add(chatId);
-        saveGroupIds();
+      if (!deps.groupChatIds.has(msg.chat.id)) {
+        deps.groupChatIds.add(msg.chat.id);
+        deps.saveGroupIds(deps.groupChatIds);
+        isNew = true;
       }
+    }
+
+    // Sync to MongoDB if it's potentially new OR periodically
+    // (We also use upsert to be safe)
+    if (isNew) {
+      await deps.BroadcastId.updateOne(
+        { chatId: chatId },
+        { $set: { type: chatType } },
+        { upsert: true }
+      ).catch(e => console.error("Error saving ChatId to MongoDB:", e.message));
+    }
+
+    // Route to dating state machine if active
+    if (isPrivate && deps.handleDatingState) {
+      const handled = await deps.handleDatingState(msg);
+      if (handled) return;
     }
   } catch (err) { }
 });

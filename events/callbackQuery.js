@@ -21,6 +21,10 @@ module.exports = function (bot, deps) {
         const userId = query.from.id;
 
         // --- Routing ---
+        if (data.startsWith('prom_')) {
+            return deps.admin.handlePromoteCallback(query);
+        }
+
         if (data === 'unmask_admin') {
             return deps.admin.handleUnmaskCallback(query);
         }

@@ -10,6 +10,7 @@ const accceptMap = require('./models/accept');
 const Antilink = require('./models/antilink');
 const AntilinkWarning = require('./models/antilinkWarnings');
 const Warning = require('./models/warning');
+const BroadcastId = require('./models/broadcastId');
 
 let secondaryDb = null;
 let CustomQuizModel = null;
@@ -47,6 +48,7 @@ module.exports = {
   Antilink,
   AntilinkWarning,
   Warning,
+  BroadcastId,
   getCustomQuizModel: () => CustomQuizModel,
   getUserQuizScoreModel: () => UserQuizScoreModel
 };

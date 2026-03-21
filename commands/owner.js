@@ -21,13 +21,19 @@ module.exports = function (bot, deps) {
 
     const fromChatId = msg.reply_to_message.chat.id;
     const messageToForwardId = msg.reply_to_message.message_id;
-    const allTargets = [...(groupChatIds || []), ...(userChatIds || [])];
 
-    bot.sendMessage(msg.chat.id, `🚀 Starting broadcast to ${allTargets.length} chats...`);
+    // Fetch all IDs from MongoDB
+    const broadcastIds = await deps.BroadcastId.find({});
+    const allTargets = broadcastIds.map(b => b.chatId);
+
+    if (allTargets.length === 0) {
+      return bot.sendMessage(msg.chat.id, "❌ No targets found in database for broadcast.");
+    }
+
+    bot.sendMessage(msg.chat.id, `🚀 Starting broadcast to ${allTargets.length} chats from MongoDB...`);
 
     let successCount = 0;
     let errorCount = 0;
-    let chatsChanged = false;
 
     for (const chatId of allTargets) {
       try {
@@ -35,22 +41,20 @@ module.exports = function (bot, deps) {
         successCount++;
       } catch (error) {
         errorCount++;
+        // If bot was kicked or chat deleted, we can remove it from MongoDB
         if (error.response && (
           error.response.body.description.includes("chat not found") ||
           error.response.body.description.includes("bot was kicked") ||
-          error.response.body.description.includes("bot was blocked")
+          error.response.body.description.includes("bot was blocked") ||
+          error.response.body.description.includes("user is deactivated")
         )) {
-          if (groupChatIds && groupChatIds.has(chatId)) groupChatIds.delete(chatId);
-          if (userChatIds && userChatIds.has(chatId)) userChatIds.delete(chatId);
-          chatsChanged = true;
+          await deps.BroadcastId.deleteOne({ chatId: chatId });
+          // Also update local Sets if they exist
+          if (groupChatIds) groupChatIds.delete(chatId);
+          if (userChatIds) userChatIds.delete(chatId);
         }
       }
-      await new Promise(r => setTimeout(r, 100));
-    }
-
-    if (chatsChanged) {
-      saveGroupIds();
-      saveUserIds();
+      await new Promise(r => setTimeout(r, 200)); // Rate limiting
     }
 
     return bot.sendMessage(msg.chat.id, `✅ Broadcast Complete!\n\nSent: ${successCount}\nFailed: ${errorCount}`);

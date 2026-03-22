@@ -1260,5 +1260,80 @@ module.exports = function (bot, deps) {
     }
   }
 
+  // --- Mass Mentions (@all and @admin) ---
+  bot.on('message', async (msg) => {
+    if (!msg.text || !msg.chat.id || msg.chat.type === 'private') return;
+    const text = msg.text;
+    const isAll = /\B@(all|tagall|everyone)\b/i.test(text);
+    const isAdminTag = /\B@(admin|admins)\b/i.test(text);
+
+    if (!isAll && !isAdminTag) return;
+
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    try {
+      if (isAll) {
+        // Admin or Owner only for @all
+        const caller = await bot.getChatMember(chatId, userId);
+        const hasPerm = ["creator", "administrator"].includes(caller.status) || botOWNER_IDS.includes(userId);
+
+        if (!hasPerm) {
+          return bot.sendMessage(chatId, "⚠️ Only administrators can use the @all tag.");
+        }
+
+        // Search for all unique users seen by the bot in this group
+        const members = await UserMap.find({ groupId: chatId.toString() });
+        if (!members || members.length === 0) return;
+
+        const zeroWidthSpace = "\u200B";
+        const chunks = handlers.chunkArray(members, 100);
+
+        for (const chunk of chunks) {
+          let hiddenMentions = "";
+          chunk.forEach(m => {
+            hiddenMentions += `[${zeroWidthSpace}](tg://user?id=${m.userId})`;
+          });
+
+          await bot.sendMessage(chatId, "📢 **Tagging all members...**" + hiddenMentions, {
+            parse_mode: 'Markdown',
+            reply_to_message_id: msg.reply_to_message ? msg.reply_to_message.message_id : msg.message_id
+          });
+          if (chunks.length > 1) await handlers.sleep(1000);
+        }
+      }
+
+      if (isAdminTag) {
+        // Anyone can use @admin to report
+        const admins = await bot.getChatAdministrators(chatId);
+        const zeroWidthSpace = "\u200B";
+        let adminMentions = "";
+
+        admins.forEach(admin => {
+          if (!admin.user.is_bot) {
+            adminMentions += `[${zeroWidthSpace}](tg://user?id=${admin.user.id})`;
+          }
+        });
+
+        let reportText = "👮‍♂️ **Admin Attention Required**\n";
+        reportText += `**Reported by:** [${msg.from.first_name}](tg://user?id=${msg.from.id})\n`;
+
+        if (msg.reply_to_message) {
+          const reportedUser = msg.reply_to_message.from;
+          reportText += `**Reported user:** [${reportedUser.first_name}](tg://user?id=${reportedUser.id})\n`;
+        }
+
+        reportText += "\n" + adminMentions;
+
+        await bot.sendMessage(chatId, reportText, {
+          parse_mode: 'Markdown',
+          reply_to_message_id: msg.reply_to_message ? msg.reply_to_message.message_id : msg.message_id
+        });
+      }
+    } catch (e) {
+      console.error("Error in mass mentions:", e);
+    }
+  });
+
   deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback, handleAntilinkActionCallback, handleGenericWarnCallback, handlePromoteCallback };
 };

@@ -11,14 +11,14 @@ const helpers = require('./utils/helpers');
 const { loadGroupIds, saveGroupIds, saveUserIds, loadUserIds } = require('./utils/storage');
 const { updateUserCount_Optimized, checkUserCount, updateUserLimit } = require('./utils/aiLimit');
 const db = require('./db/index');
-const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning, BroadcastId, CleanCommand, WelcomeSettings } = db;
+const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning, BroadcastId, CleanCommand, WelcomeSettings, SpecialUser } = db;
 
 // --- CONFIG ---
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const botOWNER_IDS = process.env.botOWNER_IDS.split(',').map(id => parseInt(id));
-const { readIds, writeIds, loadIdsToVariable } = require('./idsManager');
-let allIds = loadIdsToVariable();
-let Specialuser = [...botOWNER_IDS, ...allIds];
+// We will load Special Users from MongoDB after connection
+let allIds = [];
+let Specialuser = [...botOWNER_IDS];
 const logGrpid = process.env.logGrpid;
 const noPermissions = {
   can_send_messages: false,
@@ -72,7 +72,43 @@ const startPollingClean = async () => {
 };
 
 // --- INITIALIZATION ---
-db.connectToDatabases();
+db.connectToDatabases().then(async () => {
+  const fs = require('fs');
+  const path = require('path');
+  const idsFilePath = path.join(__dirname, 'ids.json');
+
+  // Load existing special users from MongoDB
+  try {
+    const specialUsers = await SpecialUser.find({});
+    allIds = specialUsers.map(u => u.userId);
+
+    // Migration from ids.json to MongoDB
+    if (fs.existsSync(idsFilePath)) {
+      try {
+        const fileData = JSON.parse(fs.readFileSync(idsFilePath, 'utf8'));
+        const newIds = fileData.filter(id => !allIds.includes(id));
+
+        if (newIds.length > 0) {
+          console.log(`🚀 Migrating ${newIds.length} IDs from ids.json to MongoDB...`);
+          for (const id of newIds) {
+            await SpecialUser.updateOne({ userId: id }, { $set: { userId: id } }, { upsert: true });
+          }
+          // Reload allIds after migration
+          const updatedSpecialUsers = await SpecialUser.find({});
+          allIds = updatedSpecialUsers.map(u => u.userId);
+          console.log(`✅ Migration complete. Total special users: ${allIds.length}`);
+        }
+      } catch (err) {
+        console.error("❌ Error during migration from ids.json:", err);
+      }
+    }
+
+    Specialuser = [...botOWNER_IDS, ...allIds];
+    console.log(`✅ ${allIds.length} special users loaded from MongoDB.`);
+  } catch (err) {
+    console.error("❌ Error loading special users:", err);
+  }
+});
 
 const CustomQuizModel = db.getCustomQuizModel();
 const UserQuizScoreModel = db.getUserQuizScoreModel();
@@ -131,7 +167,7 @@ const deps = {
   setSpecialuser: (newVal) => { Specialuser = newVal; },
   allIds: () => allIds,
   setAllIds: (newVal) => { allIds = newVal; },
-  writeIds,
+  SpecialUser, // Add SpecialUser model here
   updateUserCount_Optimized,
   checkUserCount,
   updateUserLimit,

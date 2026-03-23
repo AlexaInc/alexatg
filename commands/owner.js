@@ -5,7 +5,7 @@ const { StringSession } = require("telegram/sessions");
 const { exec } = require('child_process');
 
 module.exports = function (bot, deps) {
-  const { botOWNER_IDS, handlers, groupChatIds, userChatIds, saveGroupIds, saveUserIds, CustomQuizModel, Specialuser, logGrpid } = deps;
+  const { botOWNER_IDS, handlers, groupChatIds, userChatIds, saveGroupIds, saveUserIds, CustomQuizModel, logGrpid, SpecialUser } = deps;
   const { getProfilePhoto, downloadImage, handleAnonymous, getTarget } = handlers;
   const apiId = 24388624;
   const apiHash = "aa6e6675a9a88534f8ded7f318394d5f";
@@ -116,7 +116,7 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
   bot.onText(/^\/fq/, async (msg) => {
     const text = msg.text || '';
     const userId = msg.from.id;
-    const isSpecial = Specialuser.includes(userId);
+    const isSpecial = deps.Specialuser.includes(userId);
 
     if (!isSpecial) return bot.sendMessage(msg.chat.id, 'you are not a special user');
 
@@ -403,12 +403,19 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
       return bot.sendMessage(msg.chat.id, `[${msg.reply_to_message.from.first_name}](tg://user?id=${userId}) is already a special user`, { parse_mode: "Markdown" });
     }
 
-    currentAllIds.push(userId);
-    deps.setAllIds(currentAllIds);
-    deps.writeIds(currentAllIds);
-    deps.setSpecialuser([...currentAllIds, ...botOWNER_IDS]);
+    try {
+      // Save to MongoDB
+      await SpecialUser.updateOne({ userId: userId }, { $set: { userId: userId } }, { upsert: true });
 
-    bot.sendMessage(msg.chat.id, `[${msg.reply_to_message.from.first_name}](tg://user?id=${userId}) is now a special user`, { parse_mode: "Markdown" });
+      currentAllIds.push(userId);
+      deps.setAllIds(currentAllIds);
+      deps.setSpecialuser([...currentAllIds, ...botOWNER_IDS]);
+
+      bot.sendMessage(msg.chat.id, `[${msg.reply_to_message.from.first_name}](tg://user?id=${userId}) is now a special user`, { parse_mode: "Markdown" });
+    } catch (err) {
+      console.error(err);
+      bot.sendMessage(msg.chat.id, "❌ Error adding special user to MongoDB.");
+    }
   });
 
   // --- /remspecial Command ---
@@ -423,11 +430,18 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
       return bot.sendMessage(msg.chat.id, `[${msg.reply_to_message.from.first_name}](tg://user?id=${userId}) is not a special user`, { parse_mode: "Markdown" });
     }
 
-    currentAllIds = currentAllIds.filter(id => id !== userId);
-    deps.setAllIds(currentAllIds);
-    deps.writeIds(currentAllIds);
-    deps.setSpecialuser([...currentAllIds, ...botOWNER_IDS]);
+    try {
+      // Remove from MongoDB
+      await SpecialUser.deleteOne({ userId: userId });
 
-    bot.sendMessage(msg.chat.id, `[${msg.reply_to_message.from.first_name}](tg://user?id=${userId}) removed from special users`, { parse_mode: "Markdown" });
+      currentAllIds = currentAllIds.filter(id => id !== userId);
+      deps.setAllIds(currentAllIds);
+      deps.setSpecialuser([...currentAllIds, ...botOWNER_IDS]);
+
+      bot.sendMessage(msg.chat.id, `[${msg.reply_to_message.from.first_name}](tg://user?id=${userId}) removed from special users`, { parse_mode: "Markdown" });
+    } catch (err) {
+      console.error(err);
+      bot.sendMessage(msg.chat.id, "❌ Error removing special user from MongoDB.");
+    }
   });
 };

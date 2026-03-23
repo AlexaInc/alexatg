@@ -14,6 +14,8 @@ const BroadcastId = require('./models/broadcastId');
 const CleanCommand = require('./models/cleanCommand');
 const WelcomeSettings = require('./models/welcomeSettings');
 
+const SpecialUser = require('./models/specialUser');
+
 let secondaryDb = null;
 let CustomQuizModel = null;
 let UserQuizScoreModel = null;
@@ -53,6 +55,7 @@ module.exports = {
   BroadcastId,
   CleanCommand,
   WelcomeSettings,
+  SpecialUser, // Add SpecialUser here
   getCustomQuizModel: () => CustomQuizModel,
   getUserQuizScoreModel: () => UserQuizScoreModel
 };

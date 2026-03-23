@@ -159,6 +159,9 @@ module.exports = function (bot, deps) {
             case 'help_extra':
                 editMessage(ui.helpTexts.extra, ui.backToHelpKeyboard);
                 break;
+            case 'help_welcome':
+                editMessage(ui.helpTexts.welcome, ui.backToHelpKeyboard);
+                break;
             case 'help_nsfw':
                 editMessage(ui.helpTexts.nsfw, ui.backToHelpKeyboard);
                 break;

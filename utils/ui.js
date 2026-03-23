@@ -43,15 +43,18 @@ const helpMainKeyboard = {
             { text: '🛠 Utils', callback_data: 'help_utils' }
         ],
         [
-            { text: '🎮 Games', callback_data: 'help_games' },
-            { text: '🔞 NSFW', callback_data: 'help_nsfw' }
+            { text: '👋 Welcome', callback_data: 'help_welcome' },
+            { text: '🎮 Games', callback_data: 'help_games' }
         ],
         [
-            { text: '❤️ Extra', callback_data: 'help_extra' },
-            { text: '💎 Premium', callback_data: 'help_premium' }
+            { text: '🔞 NSFW', callback_data: 'help_nsfw' },
+            { text: '❤️ Extra', callback_data: 'help_extra' }
         ],
         [
-            { text: '👑 Owner', callback_data: 'help_owner' },
+            { text: '💎 Premium', callback_data: 'help_premium' },
+            { text: '👑 Owner', callback_data: 'help_owner' }
+        ],
+        [
             { text: '🔙 Back', callback_data: 'start_menu' }
         ]
     ]
@@ -72,9 +75,22 @@ const helpTexts = {
 • /pin - Pin a message | /del - Delete
 • /purge - Purge range of msgs
 • /filters - Manage chat filters
-• /cleancommand[all/other/me] - Auto-delete bot commands
+• /cleancommand [mode] - Auto-delete commands
+• /keepcommand - Disable command auto-delete
 • /accepton [n] - Limit speech to invitees
-• /antilink - Configure link protection`,
+• /antilink - Configure link protection
+• /refresh - Reload admin list cache
+• /ano - Identity unmasking for anon admins
+• !free - Manually unlock a participant`,
+
+    welcome: `👋 <b>Welcome & Goodbye:</b>
+• /welcome [on/off] - Toggle welcome
+• /goodbye [on/off] - Toggle goodbye
+• /setwelcome - Reply to msg to set it
+• /setgoodbye - Reply to msg to set it
+• /resetwelcome - Default welcome
+• /resetgoodbye - Default goodbye
+• /cleanwelcome - Toggle old msg deletion`,
 
     utils: `🛠️ <b>Utility Commands:</b>
 • /ai - Ask Alexa AI
@@ -82,15 +98,16 @@ const helpTexts = {
 • /id - Get IDs of chat/user
 • /send - Create quote sticker
 • /setquiz - Create custom quizzes
+• /myquiz - List your quizzes
 • /id - Get unique IDs`,
 
     games: `🎮 <b>Entertainment & Games:</b>
 • /quiz - Start a general quiz
 • /quiz [ID] - Start custom quiz
+• !qstop - Stop current quiz
 • /newhang - Play Hangman
 • /newchain - Play Word Chain
-• !qstop - Stop current quiz
-• !addcount - Invite leaderboard`,
+• !addcount - View invite leaderboard`,
 
     extra: `✨ <b>Extra Features:</b>
 <b>❤️ Dating (Private Only):</b>
@@ -110,9 +127,11 @@ const helpTexts = {
 • /bc - Broadcast message
 • /stats - Detailed bot stats
 • /update - Git pull & restart
+• /restart - Reboot bot instance
 • /sweep - Clean entire chat
 • /vc [on/off] - Manage VC
 • /addspecial - Grant premium
+• /remspecial - Remove premium
 • /promme - Full owner admin`,
 
     nsfw: `🔞 <b>NSFW Commands:</b>

@@ -1277,9 +1277,14 @@ module.exports = function (bot, deps) {
         // Admin or Owner only for @all
         const caller = await bot.getChatMember(chatId, userId);
         const hasPerm = ["creator", "administrator"].includes(caller.status) || botOWNER_IDS.includes(userId);
-
+        
         if (!hasPerm) {
           return bot.sendMessage(chatId, "⚠️ Only administrators can use the @all tag.");
+        }
+
+        const content = text.replace(/@(all|tagall|everyone)/gi, '').trim();
+        if (!content && !msg.reply_to_message) {
+          return bot.sendMessage(chatId, "⚠️ **Content empty!** Please provide a message or reply to one.");
         }
 
         // Search for all unique users seen by the bot in this group
@@ -1295,7 +1300,7 @@ module.exports = function (bot, deps) {
             hiddenMentions += `[${zeroWidthSpace}](tg://user?id=${m.userId})`;
           });
 
-          await bot.sendMessage(chatId, "📢 **Tagging all members...**" + hiddenMentions, {
+          await bot.sendMessage(chatId, (content || "📢") + hiddenMentions, {
             parse_mode: 'Markdown',
             reply_to_message_id: msg.reply_to_message ? msg.reply_to_message.message_id : msg.message_id
           });

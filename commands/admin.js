@@ -1283,7 +1283,7 @@ module.exports = function (bot, deps) {
         }
 
         let content = text.replace(/@(all|tagall|everyone)/gi, '').trim();
-        if (!content && !msg.reply_to_message.text) {
+        if (!content && !msg.reply_to_message?.text) {
           return bot.sendMessage(chatId, "⚠️ **Content empty!** Please provide a message or reply to one.");
         }
         if (msg.reply_to_message) {
@@ -1304,7 +1304,7 @@ module.exports = function (bot, deps) {
               mention = `@${m.username}`;
             } else {
               // Sanitize name for Markdown V1
-              const sanitizedName = (m.firstName || "User").replace(/[\[\]]/g, "");
+              const sanitizedName = m.firstName || "User";
               mention = `[${sanitizedName}](tg://user?id=${m.userId})`;
             }
             mentions += mention + (index === chunk.length - 1 ? "" : " ");

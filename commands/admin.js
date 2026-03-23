@@ -1294,16 +1294,23 @@ module.exports = function (bot, deps) {
         const members = await UserMap.find({ groupId: chatId.toString() });
         if (!members || members.length === 0) return;
 
-        const zeroWidthSpace = "\u200B";
-        const chunks = handlers.chunkArray(members, 100);
+        const chunks = handlers.chunkArray(members, 50);
 
         for (const chunk of chunks) {
-          let hiddenMentions = "";
-          chunk.forEach(m => {
-            hiddenMentions += `[${zeroWidthSpace}](tg://user?id=${m.userId})`;
+          let mentions = "";
+          chunk.forEach((m, index) => {
+            let mention = "";
+            if (m.username) {
+              mention = `@${m.username}`;
+            } else {
+              // Sanitize name for Markdown V1
+              const sanitizedName = (m.firstName || "User").replace(/[\[\]]/g, "");
+              mention = `[${sanitizedName}](tg://user?id=${m.userId})`;
+            }
+            mentions += mention + (index === chunk.length - 1 ? "" : " ");
           });
 
-          await bot.sendMessage(chatId, (content || "📢") + hiddenMentions, {
+          await bot.sendMessage(chatId, (content || "") + "\n\n" + mentions, {
             parse_mode: 'Markdown',
             reply_to_message_id: msg.reply_to_message ? msg.reply_to_message.message_id : msg.message_id
           });

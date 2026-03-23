@@ -1303,9 +1303,9 @@ module.exports = function (bot, deps) {
             if (m.username) {
               mention = `@${m.username}`;
             } else {
-              // Sanitize name for Markdown V1
-              const sanitizedName = m.firstName || "User";
-              mention = `[${sanitizedName}](tg://user?id=${m.userId})`;
+              const name = m.firstName || "User";
+              const escapedName = name.replace(/[_*\[\]`]/g, "\\$&");
+              mention = `[${escapedName}](tg://user?id=${m.userId})`;
             }
             mentions += mention + (index === chunk.length - 1 ? "" : " ");
           });
@@ -1331,11 +1331,13 @@ module.exports = function (bot, deps) {
         });
 
         let reportText = "👮‍♂️ **Admin Attention Required**\n";
-        reportText += `**Reported by:** [${msg.from.first_name}](tg://user?id=${msg.from.id})\n`;
+        const reporterName = (msg.from.first_name || "User").replace(/[_*\[\]`]/g, "\\$&");
+        reportText += `**Reported by:** [${reporterName}](tg://user?id=${msg.from.id})\n`;
 
         if (msg.reply_to_message) {
           const reportedUser = msg.reply_to_message.from;
-          reportText += `**Reported user:** [${reportedUser.first_name}](tg://user?id=${reportedUser.id})\n`;
+          const reportedUserName = (reportedUser.first_name || "User").replace(/[_*\[\]`]/g, "\\$&");
+          reportText += `**Reported user:** [${reportedUserName}](tg://user?id=${reportedUser.id})\n`;
         }
 
         reportText += "\n" + adminMentions;

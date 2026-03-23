@@ -130,23 +130,37 @@ module.exports = function (bot, deps) {
                     bot.answerCallbackQuery(query.id, { text: 'Contacts are still loading...', show_alert: true });
                 }
                 break;
+            case 'bot_stats':
+                const stats = `📊 <b>Bot Statistics:</b>\n\nGroups: <code>${deps.groupChatIds.size}</code>\nUsers (DM): <code>${deps.userChatIds.size}</code>\nTotal Chats: <code>${deps.groupChatIds.size + deps.userChatIds.size}</code>`;
+                editMessage(stats, { inline_keyboard: [[{ text: '🔙 Back', callback_data: 'start_menu' }]] });
+                break;
             case 'help_main':
-                editMessage('Please select a command category:', ui.helpMainKeyboard);
-                break;
-            case 'help_owner':
-                editMessage(`<b>Owner Commands:</b>\n\n/bc - Send a message\n /stats - Get bot stats`, ui.backToHelpKeyboard);
-                break;
-            case 'help_premium':
-                editMessage(`/fq - create fake sticker\nand you can use ai function unlimited`, ui.backToHelpKeyboard);
-                break;
-            case 'help_nsfw':
-                editMessage(ui.nsfwCommands.join("\n"), ui.backToHelpKeyboard);
+                editMessage('<b>Please select a command category:</b>', ui.helpMainKeyboard);
                 break;
             case 'help_admin':
-                editMessage('<b>Group Admin Commands:</b>\n\n/ba - Ban a user\n/mu - Mute a user\n/filter - filter a message\nfilters - get filters list\n/stop - stop filter', ui.backToHelpKeyboard);
+                editMessage(ui.helpTexts.admin, ui.backToHelpKeyboard);
                 break;
-            case 'help_ai':
-                editMessage('<b>Al Commands:</b>\n\n/ai - ask from ai\n/aic - check how many lef today', ui.backToHelpKeyboard);
+            case 'help_utils':
+                editMessage(ui.helpTexts.utils, ui.backToHelpKeyboard);
+                break;
+            case 'help_games':
+                editMessage(ui.helpTexts.games, ui.backToHelpKeyboard);
+                break;
+            case 'help_premium':
+                editMessage(ui.helpTexts.premium, ui.backToHelpKeyboard);
+                break;
+            case 'help_owner':
+                if (botOWNER_IDS.includes(userId)) {
+                    editMessage(ui.helpTexts.owner, ui.backToHelpKeyboard);
+                } else {
+                    bot.answerCallbackQuery(query.id, { text: '❌ This section is for bot owners only.', show_alert: true });
+                }
+                break;
+            case 'help_extra':
+                editMessage(ui.helpTexts.extra, ui.backToHelpKeyboard);
+                break;
+            case 'help_nsfw':
+                editMessage(ui.helpTexts.nsfw, ui.backToHelpKeyboard);
                 break;
         }
 

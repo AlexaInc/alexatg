@@ -1,5 +1,6 @@
 const axios = require('axios');
 const https = require('https');
+const moment = require('moment-timezone');
 
 const adminCache = {};
 
@@ -309,7 +310,58 @@ function getGreeting() {
   return "Good Night 🌙";
 }
 
+/**
+ * Escapes HTML special characters.
+ */
+const escapeHTML = (str) => str.replace(/[&<>"']/g, m => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[m]);
+
+/**
+ * Converts Telegram message with entities to HTML string.
+ */
+function toHTML(text, entities) {
+  if (!text) return "";
+  if (!entities || entities.length === 0) return escapeHTML(text);
+
+  const tags = [];
+  entities.forEach(e => {
+    let start = "";
+    let end = "";
+    switch (e.type) {
+      case 'bold': start = "<b>"; end = "</b>"; break;
+      case 'italic': start = "<i>"; end = "</i>"; break;
+      case 'underline': start = "<u>"; end = "</u>"; break;
+      case 'strikethrough': start = "<s>"; end = "</s>"; break;
+      case 'code': start = "<code>"; end = "</code>"; break;
+      case 'pre': start = "<pre>"; end = "</pre>"; break;
+      case 'text_link': start = `<a href="${e.url}">`; end = "</a>"; break;
+      case 'spoiler': start = '<span class="tg-spoiler">'; end = "</span>"; break;
+      case 'custom_emoji': start = `<tg-emoji emoji-id="${e.custom_emoji_id}">`; end = "</tg-emoji>"; break;
+      case 'text_mention': start = `<a href="tg://user?id=${e.user.id}">`; end = "</a>"; break;
+    }
+    if (start) {
+      tags.push({ pos: e.offset, tag: start, type: 'start' });
+      tags.push({ pos: e.offset + e.length, tag: end, type: 'end' });
+    }
+  });
+
+  tags.sort((a, b) => a.pos - b.pos || (a.type === 'end' ? -1 : 1));
+
+  let html = "";
+  let lastPos = 0;
+  tags.forEach(t => {
+    html += escapeHTML(text.substring(lastPos, t.pos));
+    html += t.tag;
+    lastPos = t.pos;
+  });
+  html += escapeHTML(text.substring(lastPos));
+  return html;
+}
+
 module.exports = {
+  toHTML,
+  escapeHTML,
   getMessageType,
   parseFilterTriggers,
   wrapTextSmart,

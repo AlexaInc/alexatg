@@ -11,41 +11,113 @@ const nsfwCommands = [
 const getStartMessage = (senderName) => {
     return `ʜᴇʏ <b>${senderName}</b> , 🥀
 ๏ ɪ'ᴍ alexa ʜᴇʀᴇ ᴛᴏ ʜᴇʟᴘ ʏᴏᴜ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ɢʀᴏᴜᴘs!
+
 ʜɪᴛ ʜᴇʟᴘ ᴛᴏ ғɪɴᴅ ᴏᴜᴛ ᴍᴏʀᴇ ᴀʙᴏᴜᴛ ʜᴏᴡ ᴛᴏ ᴜsᴇ ᴍᴇ ɪɴ ᴍʏ ғᴜʟʟ ᴘᴏᴛᴇɴᴛɪᴀʟ!
+
 ➻ ᴛʜᴇ ᴍᴏsᴛ ᴩᴏᴡᴇʀғᴜʟ ᴛᴇʟᴇɢʀᴀᴍ ɢʀᴏᴜᴩ ᴍᴀɴᴀɢᴇᴍᴇɴᴛ ʙᴏᴛ ᴀɴᴅ ɪ ʜᴀᴠᴇ sᴏᴍᴇ ᴀᴡᴇsᴏᴍᴇ , fun ᴀɴᴅ ᴜsᴇғᴜʟ ғᴇᴀᴛᴜʀᴇs.`;
 };
 
 const startKeyboard = {
     inline_keyboard: [
         [
-            { text: 'Contact Us', callback_data: 'contact_us' },
-            { text: 'Help & Commands', callback_data: 'help_main' }
+            { text: '🆘 Help & Commands', callback_data: 'help_main' }
         ],
         [
-            { text: 'join official channel', url: 'https://t.me/AlexaInc_updates' },
-            { text: 'use on whatsapp', url: 'wa.me/+94771058234?text=Hello%2C+I+want+to+talk+to+Alexa' }
+            { text: '👤 Contact Us', callback_data: 'contact_us' },
+            { text: '📊 Stats', callback_data: 'bot_stats' }
         ],
         [
-            { text: 'Add me to your group', url: 'https://t.me/alexaIncbot?startgroup=bot_setup' }
+            { text: '📢 Official Channel', url: 'https://t.me/AlexaInc_updates' },
+            { text: '💬 WhatsApp', url: 'wa.me/+94771058234?text=Hello%2C+I+want+to+talk+to+Alexa' }
+        ],
+        [
+            { text: '➕ Add me to your group', url: 'https://t.me/alexaIncbot?startgroup=bot_setup' }
         ]
     ]
 };
 
 const helpMainKeyboard = {
     inline_keyboard: [
-        [{ text: 'Bot Owner Commands', callback_data: 'help_owner' }],
-        [{ text: 'Bot Premium Commands', callback_data: 'help_premium' }],
-        [{ text: 'NSFW Commands', callback_data: 'help_nsfw' }],
-        [{ text: 'Group Admin Commands', callback_data: 'help_admin' }],
-        [{ text: 'Other Commands', callback_data: 'help_ai' }],
-        [{ text: '🔙 Back', callback_data: 'start_menu' }]
+        [
+            { text: '👮 Admin', callback_data: 'help_admin' },
+            { text: '🛠 Utils', callback_data: 'help_utils' }
+        ],
+        [
+            { text: '🎮 Games', callback_data: 'help_games' },
+            { text: '🔞 NSFW', callback_data: 'help_nsfw' }
+        ],
+        [
+            { text: '❤️ Extra', callback_data: 'help_extra' },
+            { text: '💎 Premium', callback_data: 'help_premium' }
+        ],
+        [
+            { text: '👑 Owner', callback_data: 'help_owner' },
+            { text: '🔙 Back', callback_data: 'start_menu' }
+        ]
     ]
 };
 
 const backToHelpKeyboard = {
     inline_keyboard: [
-        [{ text: '🔙 Back', callback_data: 'help_main' }]
+        [{ text: '🔙 Back to Help', callback_data: 'help_main' }]
     ]
+};
+
+const helpTexts = {
+    admin: `🛡️ <b>Admin Commands:</b>
+• /ba - Ban a user | /unba - Unban
+• /mu - Mute a user | /unmu - Unmute
+• /warn - Warn a user | /unwarn - Remove
+• /prom - Promote user | /dem - Demote
+• /pin - Pin a message | /del - Delete
+• /purge - Purge range of msgs
+• /filters - Manage chat filters
+• /cleancommand[all/other/me] - Auto-delete bot commands
+• /accepton [n] - Limit speech to invitees
+• /antilink - Configure link protection`,
+
+    utils: `🛠️ <b>Utility Commands:</b>
+• /ai - Ask Alexa AI
+• /aic - Check AI usage limit
+• /id - Get IDs of chat/user
+• /send - Create quote sticker
+• /setquiz - Create custom quizzes
+• /id - Get unique IDs`,
+
+    games: `🎮 <b>Entertainment & Games:</b>
+• /quiz - Start a general quiz
+• /quiz [ID] - Start custom quiz
+• /newhang - Play Hangman
+• /newchain - Play Word Chain
+• !qstop - Stop current quiz
+• !addcount - Invite leaderboard`,
+
+    extra: `✨ <b>Extra Features:</b>
+<b>❤️ Dating (Private Only):</b>
+• /dating - Start profile creation
+• /find - Discover matches
+• /settings - Update dating prefs
+
+<b>📢 Broadcast & More:</b>
+• /bc - Special user broadcast`,
+
+    premium: `💎 <b>Premium Features:</b>
+• /fq - Generate fake stickers
+• 🚀 Unlimited AI Usage
+• 📂 Exclusive access to new tools`,
+
+    owner: `👑 <b>Owner Commands:</b>
+• /bc - Broadcast message
+• /stats - Detailed bot stats
+• /update - Git pull & restart
+• /sweep - Clean entire chat
+• /vc [on/off] - Manage VC
+• /addspecial - Grant premium
+• /promme - Full owner admin`,
+
+    nsfw: `🔞 <b>NSFW Commands:</b>
+NSFW must be enabled via /nsfwon.
+Available: /anal, /ass, /boobs, /hentai, /pussy, /yaoi, and more...`
 };
 
 module.exports = {
@@ -54,5 +126,6 @@ module.exports = {
     getStartMessage,
     startKeyboard,
     helpMainKeyboard,
-    backToHelpKeyboard
+    backToHelpKeyboard,
+    helpTexts
 };

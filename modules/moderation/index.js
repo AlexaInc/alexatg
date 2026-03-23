@@ -10,9 +10,10 @@ module.exports = function (bot, deps) {
         noPermissions,
         botOWNER_IDS,
         Filters,
-        handlers
+        handlers,
+        WelcomeSettings
     } = deps;
-    const { getGreeting } = handlers;
+    const { getGreeting, escapeHTML } = handlers;
 
     // ====== New Member Handler ======
     bot.on("new_chat_members", async (msg) => {
@@ -49,7 +50,52 @@ module.exports = function (bot, deps) {
                     saveGroupIds();
                 }
             }
-        } catch (err) { }
+
+            // ====== Welcome Message Logic ======
+            const settings = await WelcomeSettings.findOne({ groupId: String(chatId) });
+            if (settings?.welcomeEnabled) {
+                for (const member of newMembers) {
+                    if (member.id === me.id) continue;
+
+                    const name = escapeHTML((member.first_name + " " + (member.last_name || "")).trim());
+                    const gname = escapeHTML(msg.chat.title || "");
+                    let text = settings.welcomeMessage
+                        .replace(/\{name\}|<name>/gi, name)
+                        .replace(/\{gname\}|<gname>|\{group name\}|<group name>/gi, gname)
+                        .replace(/\{time\}/gi, require('moment-timezone').tz('Asia/Colombo').format('HH:mm:ss'))
+                        .replace(/\{date\}/gi, require('moment-timezone').tz('Asia/Colombo').format('MMMM Do YYYY'))
+                        .replace(/\{day\}/gi, require('moment-timezone').tz('Asia/Colombo').format('dddd'))
+                        .replace(/\{greating\}/gi, getGreeting());
+
+                    if (settings.cleanWelcome && settings.lastWelcomeMessageId) {
+                        bot.deleteMessage(chatId, settings.lastWelcomeMessageId).catch(() => { });
+                    }
+
+                    let sentMsg;
+                    const options = { parse_mode: 'HTML' };
+
+                    if (settings.welcomeFileId) {
+                        options.caption = text;
+                        switch (settings.welcomeType) {
+                            case 'photo': sentMsg = await bot.sendPhoto(chatId, settings.welcomeFileId, options); break;
+                            case 'video': sentMsg = await bot.sendVideo(chatId, settings.welcomeFileId, options); break;
+                            case 'animation': sentMsg = await bot.sendAnimation(chatId, settings.welcomeFileId, options); break;
+                            case 'document': sentMsg = await bot.sendDocument(chatId, settings.welcomeFileId, options); break;
+                            default: sentMsg = await bot.sendMessage(chatId, text, options);
+                        }
+                    } else {
+                        sentMsg = await bot.sendMessage(chatId, text, options);
+                    }
+
+                    if (settings.cleanWelcome && sentMsg) {
+                        await WelcomeSettings.updateOne({ groupId: String(chatId) }, { lastWelcomeMessageId: sentMsg.message_id });
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMsg.message_id).catch(() => { });
+                        }, 5 * 60 * 1000); // 5 minutes
+                    }
+                }
+            }
+        } catch (err) { console.error("Error in new_chat_members:", err); }
     });
 
     bot.on('left_chat_member', async (msg) => {
@@ -62,8 +108,51 @@ module.exports = function (bot, deps) {
                     groupChatIds.delete(chatId);
                     saveGroupIds();
                 }
+                return;
             }
-        } catch (err) { }
+
+            // ====== Goodbye Message Logic ======
+            const settings = await WelcomeSettings.findOne({ groupId: String(chatId) });
+            if (settings?.goodbyeEnabled) {
+                const member = msg.left_chat_member;
+                const name = escapeHTML((member.first_name + " " + (member.last_name || "")).trim());
+                const gname = escapeHTML(msg.chat.title || "");
+                let text = settings.goodbyeMessage
+                    .replace(/\{name\}|<name>/gi, name)
+                    .replace(/\{gname\}|<gname>|\{group name\}|<group name>/gi, gname)
+                    .replace(/\{time\}/gi, require('moment-timezone').tz('Asia/Colombo').format('HH:mm:ss'))
+                    .replace(/\{date\}/gi, require('moment-timezone').tz('Asia/Colombo').format('MMMM Do YYYY'))
+                    .replace(/\{day\}/gi, require('moment-timezone').tz('Asia/Colombo').format('dddd'))
+                    .replace(/\{greating\}/gi, getGreeting());
+
+                if (settings.cleanWelcome && settings.lastGoodbyeMessageId) {
+                    bot.deleteMessage(chatId, settings.lastGoodbyeMessageId).catch(() => { });
+                }
+
+                let sentMsg;
+                const options = { parse_mode: 'HTML' };
+
+                if (settings.goodbyeFileId) {
+                    options.caption = text;
+                    switch (settings.goodbyeType) {
+                        case 'photo': sentMsg = await bot.sendPhoto(chatId, settings.goodbyeFileId, options); break;
+                        case 'video': sentMsg = await bot.sendVideo(chatId, settings.goodbyeFileId, options); break;
+                        case 'animation': sentMsg = await bot.sendAnimation(chatId, settings.goodbyeFileId, options); break;
+                        case 'document': sentMsg = await bot.sendDocument(chatId, settings.goodbyeFileId, options); break;
+                        default: sentMsg = await bot.sendMessage(chatId, text, options);
+                    }
+                } else {
+                    sentMsg = await bot.sendMessage(chatId, text, options);
+                }
+
+                if (settings.cleanWelcome && sentMsg) {
+                    await WelcomeSettings.updateOne({ groupId: String(chatId) }, { lastGoodbyeMessageId: sentMsg.message_id });
+                    setTimeout(() => {
+                        bot.deleteMessage(chatId, sentMsg.message_id).catch(() => { });
+                    }, 5 * 60 * 1000); // 5 minutes
+                }
+            }
+        } catch (err) { console.error("Error in left_chat_member:", err); }
     });
 
     // ====== Message Interceptor for Invite Check ======

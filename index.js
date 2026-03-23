@@ -11,7 +11,7 @@ const helpers = require('./utils/helpers');
 const { loadGroupIds, saveGroupIds, saveUserIds, loadUserIds } = require('./utils/storage');
 const { updateUserCount_Optimized, checkUserCount, updateUserLimit } = require('./utils/aiLimit');
 const db = require('./db/index');
-const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning, BroadcastId, CleanCommand } = db;
+const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning, BroadcastId, CleanCommand, WelcomeSettings } = db;
 
 // --- CONFIG ---
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -146,6 +146,7 @@ const deps = {
   AntilinkWarning,
   Warning,
   CleanCommand,
+  WelcomeSettings,
   get CustomQuizModel() { return db.getCustomQuizModel(); },
   get UserQuizScoreModel() { return db.getUserQuizScoreModel(); },
   groupChatIds: loadGroupIds(),
@@ -175,6 +176,7 @@ require('./commands/common')(bot, deps);
 require('./commands/admin')(bot, deps);
 require('./commands/owner')(bot, deps);
 require('./commands/games')(bot, deps);
+require('./commands/welcome')(bot, deps);
 
 const datingModule = require('./modules/dating')(bot, deps);
 deps.dating = datingModule;

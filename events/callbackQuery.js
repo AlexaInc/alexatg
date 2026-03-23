@@ -21,6 +21,10 @@ module.exports = function (bot, deps) {
         const userId = query.from.id;
 
         // --- Routing ---
+        if (data.startsWith('pin_msg_')) {
+            return deps.admin.handlePinCallback(query);
+        }
+
         if (data.startsWith('prom_')) {
             return deps.admin.handlePromoteCallback(query);
         }

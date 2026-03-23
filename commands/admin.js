@@ -1352,11 +1352,24 @@ module.exports = function (bot, deps) {
     const isNotAdmin = typeof result === 'string' && result.includes("You must be an admin");
 
     if (isMissingPerm || isNotAdmin) {
+      if (!msg.reply_to_message) return bot.sendMessage(chatId, "⚠️ Reply to a message you want to pin.");
+
       const admins = await deps.handlers.getAdmins(bot, chatId);
       const pinAdmins = admins.filter(a => (a.status === 'creator' || a.can_pin_messages) && !a.user.is_bot);
       const zeroWidthSpace = "\u200B";
       const mentions = pinAdmins.map(a => `[${zeroWidthSpace}](tg://user?id=${a.user.id})`).join('');
-      return bot.sendMessage(chatId, `📌 **Pin Request** by [${msg.from.first_name}](tg://user?id=${msg.from.id})${mentions}`, { parse_mode: 'Markdown' });
+
+      const targetMsgId = msg.reply_to_message.message_id;
+      const keyboard = {
+        inline_keyboard: [[
+          { text: "📌 Approve Pin", callback_data: `pin_msg_${targetMsgId}` }
+        ]]
+      };
+
+      return bot.sendMessage(chatId, `📌 **Pin Request** by [${msg.from.first_name}](tg://user?id=${msg.from.id})${mentions}`, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
     }
 
     if (typeof result === 'string') return bot.sendMessage(chatId, result);
@@ -1393,5 +1406,38 @@ module.exports = function (bot, deps) {
     bot.sendMessage(chatId, "✅ Admin cache refreshed for this group.");
   });
 
-  deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback, handleAntilinkActionCallback, handleGenericWarnCallback, handlePromoteCallback };
+  // --- CALLBACK HANDLERS ---
+  async function handlePinCallback(query) {
+    const chatId = query.message.chat.id;
+    const userId = query.from.id;
+    const data = query.data; // pin_msg_{targetMsgId}
+    const targetMsgId = data.split('_')[2];
+
+    try {
+      const admins = await deps.handlers.getAdmins(bot, chatId);
+      const caller = admins.find(a => a.user.id === userId);
+      const isOwner = deps.botOWNER_IDS.includes(userId);
+      const canPin = isOwner || (caller && (caller.status === 'creator' || caller.can_pin_messages));
+
+      if (!canPin) {
+        return bot.answerCallbackQuery(query.id, { text: "❌ You don't have permission to pin messages.", show_alert: true });
+      }
+
+      await bot.pinChatMessage(chatId, targetMsgId);
+      await bot.answerCallbackQuery(query.id, { text: "✅ Message pinned!" });
+
+      const approvedBy = `[${query.from.first_name}](tg://user?id=${userId})`;
+      await bot.editMessageText(`📌 **Pin Request Approved**\n\n✅ Message has been pinned by ${approvedBy}.`, {
+        chat_id: chatId,
+        message_id: query.message.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: [] }
+      });
+    } catch (err) {
+      console.error(err);
+      bot.answerCallbackQuery(query.id, { text: "❌ Failed to pin. Message might be too old or deleted.", show_alert: true });
+    }
+  }
+
+  deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback, handleAntilinkActionCallback, handleGenericWarnCallback, handlePromoteCallback, handlePinCallback };
 };

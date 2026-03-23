@@ -256,12 +256,16 @@ bot.on('message', async (msg) => {
     case 'qu_mod_text': {
         const { quizId, qIdx, page } = session;
         const quiz = await CustomQuizModel.findOne({ quizId });
-        quiz.questions[qIdx].question = text;
-        await quiz.save();
+
+        if (text !== '/skip') {
+          quiz.questions[qIdx].question = text;
+          await quiz.save();
+        }
         
         delete userSessions[chatId];
         const q = quiz.questions[qIdx];
-        const qText = `✅ *Question updated!*\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+        const updated = (text === '/skip') ? "⚠️ Change cancelled" : "✅ Question updated!";
+        const qText = `${updated}\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
         bot.sendMessage(chatId, qText, {
             parse_mode: 'Markdown',
             reply_markup: {
@@ -285,7 +289,8 @@ bot.on('message', async (msg) => {
         
         delete userSessions[chatId];
         const q = quiz.questions[qIdx];
-        const qText = `✅ *Explanation updated!*\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+        const updated = (text === '/skip') ? "🧹 Explanation cleared!" : "✅ Explanation updated!";
+        const qText = `${updated}\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
         bot.sendMessage(chatId, qText, {
             parse_mode: 'Markdown',
             reply_markup: {
@@ -548,14 +553,15 @@ bot.on('callback_query', async (query) => {
 
     if (type === "txt") {
       userSessions[chatId] = { step: 'qu_mod_text', quizId: qId, qIdx, page };
-      await bot.sendMessage(chatId, "Enter new question text:");
+      await bot.sendMessage(chatId, "Enter new question text (or send /skip to cancel):");
     } else if (type === "exp") {
       userSessions[chatId] = { step: 'qu_mod_exp', quizId: qId, qIdx, page };
-      await bot.sendMessage(chatId, "Enter new explanation:");
+      await bot.sendMessage(chatId, "Enter new explanation (or send /skip to cancel):");
     } else if (type === "ans") {
       const quiz = await CustomQuizModel.findOne({ quizId: qId });
       const q = quiz.questions[qIdx];
       const btns = q.options.map((opt, i) => ([{ text: `${i + 1}. ${opt}`, callback_data: `qu_set_ans_${qId}_${qIdx}_${i}_${page}` }]));
+      btns.push([{ text: "🔙 Back", callback_data: `qu_info_${qId}_${qIdx}_${page}` }]);
       await bot.editMessageText("Select correct answer index:", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns } });
     }
   }

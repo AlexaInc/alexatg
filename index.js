@@ -181,6 +181,7 @@ const deps = {
   Antilink,
   AntilinkWarning,
   Warning,
+  BroadcastId,
   CleanCommand,
   WelcomeSettings,
   get CustomQuizModel() { return db.getCustomQuizModel(); },

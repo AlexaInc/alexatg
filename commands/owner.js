@@ -12,7 +12,8 @@ module.exports = function (bot, deps) {
   const userAccountID = process.env.userAccountID;
 
   async function broadcast(msg) {
-    if (!botOWNER_IDS.includes(msg.from.id)) {
+    const isAuthorized = botOWNER_IDS.includes(msg.from.id) || deps.Specialuser.includes(msg.from.id);
+    if (!isAuthorized) {
       return bot.sendMessage(msg.chat.id, "Sorry, you are not authorized.");
     }
     if (!msg.reply_to_message) {
@@ -60,7 +61,7 @@ module.exports = function (bot, deps) {
     return bot.sendMessage(msg.chat.id, `✅ Broadcast Complete!\n\nSent: ${successCount}\nFailed: ${errorCount}`);
   }
 
-  bot.onText(/\/bc/, broadcast);
+  bot.onText(/^\/bc/, broadcast);
 
   // --- /stats Command ---
   bot.onText(/^\/stats/, async (msg) => {
@@ -223,7 +224,7 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
     if (isNaN(newLimit) || newLimit <= 0) return bot.sendMessage(msg.chat.id, "Usage: `/uail 30`", { parse_mode: 'Markdown' });
 
     try {
-      updateUserLimit(newLimit);
+      deps.updateUserLimit(newLimit);
       bot.sendMessage(msg.chat.id, `✅ Daily AI limit: **${newLimit}**.`, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "Error writing limit."); }
   });
@@ -234,6 +235,7 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
     const userId = msg.from.id;
     if (!botOWNER_IDS.includes(userId)) return;
     const fullText = msg.text || ' ';
+    const command = '/promme';
     const argsText = fullText.substring(command.length).trim() + ' full';
     const args = argsText.toLowerCase().split(/\s+/).filter(Boolean);
 

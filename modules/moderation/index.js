@@ -70,7 +70,35 @@ module.exports = function (bot, deps) {
     bot.on('message', async (msg) => {
         try {
             const text = msg.text || msg.caption || "";
-            if (!text || text.startsWith('/') || text.startsWith('!')) return;
+            if (!text) return;
+
+            // --- CleanCommand Logic ---
+            if (text.startsWith('/')) {
+                const cleanSettings = await deps.CleanCommand.findOne({ groupId: String(msg.chat.id) });
+                if (cleanSettings?.enabled) {
+                    const commandPart = text.split(' ')[0];
+                    const hasBotTag = commandPart.includes('@');
+                    const isMyTag = hasBotTag && commandPart.toLowerCase().endsWith(`@${deps.BOT_USERNAME.toLowerCase()}`);
+
+                    let shouldDelete = false;
+                    if (cleanSettings.mode === 'all') {
+                        shouldDelete = true;
+                    } else if (cleanSettings.mode === 'other') {
+                        if (hasBotTag && !isMyTag) shouldDelete = true;
+                    } else if (cleanSettings.mode === 'me') {
+                        if (!hasBotTag || isMyTag) shouldDelete = true;
+                    }
+
+                    if (shouldDelete) {
+                        // Don't delete my own configuration commands for this bot immediately if needed
+                        // but usually it's better to keep them for visibility, OR delete after response.
+                        // I'll delete all commands as requested.
+                        bot.deleteMessage(msg.chat.id, msg.message_id).catch(() => { });
+                    }
+                }
+            }
+
+            if (text.startsWith('/') || text.startsWith('!')) return;
             const chatId = msg.chat.id;
             const userId = msg.from.id;
 

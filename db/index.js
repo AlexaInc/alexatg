@@ -11,6 +11,7 @@ const Antilink = require('./models/antilink');
 const AntilinkWarning = require('./models/antilinkWarnings');
 const Warning = require('./models/warning');
 const BroadcastId = require('./models/broadcastId');
+const CleanCommand = require('./models/cleanCommand');
 
 let secondaryDb = null;
 let CustomQuizModel = null;
@@ -49,6 +50,7 @@ module.exports = {
   AntilinkWarning,
   Warning,
   BroadcastId,
+  CleanCommand,
   getCustomQuizModel: () => CustomQuizModel,
   getUserQuizScoreModel: () => UserQuizScoreModel
 };

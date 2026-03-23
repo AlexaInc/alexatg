@@ -11,7 +11,7 @@ const helpers = require('./utils/helpers');
 const { loadGroupIds, saveGroupIds, saveUserIds, loadUserIds } = require('./utils/storage');
 const { updateUserCount_Optimized, checkUserCount, updateUserLimit } = require('./utils/aiLimit');
 const db = require('./db/index');
-const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning, BroadcastId } = db;
+const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning, BroadcastId, CleanCommand } = db;
 
 // --- CONFIG ---
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -53,6 +53,7 @@ const bot = new TelegramBot(BOT_TOKEN, {
 });
 
 let BOT_ID;
+let BOT_USERNAME;
 let contactKeyboard = null;
 
 // Safe polling start — waits for old instance to release, drops stale updates
@@ -144,7 +145,7 @@ const deps = {
   Antilink,
   AntilinkWarning,
   Warning,
-  BroadcastId,
+  CleanCommand,
   get CustomQuizModel() { return db.getCustomQuizModel(); },
   get UserQuizScoreModel() { return db.getUserQuizScoreModel(); },
   groupChatIds: loadGroupIds(),
@@ -158,6 +159,7 @@ const deps = {
   noPermissions,
   getContactKeyboard: () => contactKeyboard,
   get BOT_ID() { return BOT_ID; },
+  get BOT_USERNAME() { return BOT_USERNAME; },
   stopBots
 };
 
@@ -230,6 +232,7 @@ const initializeBot = async () => {
   try {
     const me = await bot.getMe();
     BOT_ID = me.id;
+    BOT_USERNAME = me.username;
     console.log(`Bot starting... Logged in as ${me.username}`);
     bot.sendMessage(logGrpid, `Bot starting... Logged in as ${me.username}`);
     const promises = botOWNER_IDS.map(id => bot.getChat(id).catch(() => null));

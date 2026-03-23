@@ -1406,6 +1406,41 @@ module.exports = function (bot, deps) {
     bot.sendMessage(chatId, "✅ Admin cache refreshed for this group.");
   });
 
+  // --- CLEANCOMMAND ---
+  bot.onText(/^\/(cleancommand|clean)(\s+all|\s+other|\s+me)?/i, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    const result = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID);
+    if (result && typeof result === 'string') return bot.sendMessage(chatId, result);
+
+    const mode = (match[2] || ' all').trim().toLowerCase();
+
+    await deps.CleanCommand.updateOne(
+      { groupId: chatId },
+      { $set: { enabled: true, mode: mode } },
+      { upsert: true }
+    );
+
+    bot.sendMessage(chatId, `✅ **Clean Command** is now **ENABLED**.\nMode: \`${mode}\``, { parse_mode: 'Markdown' });
+  });
+
+  bot.onText(/^\/(keepcommand|keep)/i, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    const result = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID);
+    if (result && typeof result === 'string') return bot.sendMessage(chatId, result);
+
+    await deps.CleanCommand.updateOne(
+      { groupId: chatId },
+      { $set: { enabled: false } },
+      { upsert: true }
+    );
+
+    bot.sendMessage(chatId, `⏹ **Clean Command** is now **DISABLED**. Command messages will no longer be deleted.`, { parse_mode: 'Markdown' });
+  });
+
   // --- CALLBACK HANDLERS ---
   async function handlePinCallback(query) {
     const chatId = query.message.chat.id;

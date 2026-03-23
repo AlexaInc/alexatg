@@ -252,6 +252,55 @@ bot.on('message', async (msg) => {
       break;
     }
 
+    // ── Granular Question Editing ──
+    case 'qu_mod_text': {
+        const { quizId, qIdx, page } = session;
+        const quiz = await CustomQuizModel.findOne({ quizId });
+        quiz.questions[qIdx].question = text;
+        await quiz.save();
+        
+        delete userSessions[chatId];
+        const q = quiz.questions[qIdx];
+        const qText = `✅ *Question updated!*\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+        bot.sendMessage(chatId, qText, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${quizId}_${qIdx}_${page}` }],
+                    [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${quizId}_${qIdx}_${page}` }],
+                    [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${quizId}_${qIdx}_${page}` }],
+                    [{ text: "🗑 Delete Question", callback_data: `qu_del_${quizId}_${qIdx}_${page}` }],
+                    [{ text: "🔙 Back", callback_data: `qns_page_${quizId}_${page}` }]
+                ]
+            }
+        });
+        break;
+    }
+
+    case 'qu_mod_exp': {
+        const { quizId, qIdx, page } = session;
+        const quiz = await CustomQuizModel.findOne({ quizId });
+        quiz.questions[qIdx].explanation = (text === '/skip') ? '' : text;
+        await quiz.save();
+        
+        delete userSessions[chatId];
+        const q = quiz.questions[qIdx];
+        const qText = `✅ *Explanation updated!*\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+        bot.sendMessage(chatId, qText, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${quizId}_${qIdx}_${page}` }],
+                    [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${quizId}_${qIdx}_${page}` }],
+                    [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${quizId}_${qIdx}_${page}` }],
+                    [{ text: "🗑 Delete Question", callback_data: `qu_del_${quizId}_${qIdx}_${page}` }],
+                    [{ text: "🔙 Back", callback_data: `qns_page_${quizId}_${page}` }]
+                ]
+            }
+        });
+        break;
+    }
+
     default:
       break;
   }
@@ -447,20 +496,113 @@ bot.on('callback_query', async (query) => {
         userSessions[chatId] = { step: 'edit_time', quizId: qId };
         await bot.sendMessage(chatId, "Enter seconds per question (10-600):");
       } else if (action === "qns") {
-        // Show questions list to delete individually
-        const quiz = await CustomQuizModel.findOne({ quizId: qId });
-        let qText = `❓ *Editing Questions for ${quiz.title}*\n\nWhich question do you want to delete?`;
-        const buttons = quiz.questions.map((q, i) => ([{ text: `🗑 [${i + 1}] ${q.question.substring(0, 30)}...`, callback_data: `q_del_${qId}_${i}` }]));
-        buttons.push([{ text: "🔙 Back", callback_data: `edit_${qId}` }]);
-
-        await bot.editMessageText(qText, {
-          chat_id: chatId,
-          message_id: messageId,
-          parse_mode: "Markdown",
-          reply_markup: { inline_keyboard: buttons }
-        });
+        await showQuestionsPage(chatId, messageId, qId, 0);
       }
     }
+  }
+
+  // Question Pagination
+  if (data.startsWith("qns_page_")) {
+    const parts = data.split("_");
+    const qId = parts[2];
+    const page = parseInt(parts[3], 10);
+    await showQuestionsPage(chatId, messageId, qId, page);
+  }
+
+  // Question Info/Details
+  if (data.startsWith("qu_info_")) {
+    const parts = data.split("_");
+    const qId = parts[2];
+    const qIdx = parseInt(parts[3], 10);
+    const page = parts[4];
+
+    const quiz = await CustomQuizModel.findOne({ quizId: qId });
+    const q = quiz.questions[qIdx];
+    if (!q) return bot.answerCallbackQuery(query.id, { text: "❌ Question not found." });
+
+    const qText = `❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+    
+    await bot.editMessageText(qText, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${qId}_${qIdx}_${page}` }],
+          [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${qId}_${qIdx}_${page}` }],
+          [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${qId}_${qIdx}_${page}` }],
+          [{ text: "🗑 Delete Question", callback_data: `qu_del_${qId}_${qIdx}_${page}` }],
+          [{ text: "🔙 Back", callback_data: `qns_page_${qId}_${page}` }]
+        ]
+      }
+    });
+  }
+
+  // Handle granular question modification callbacks
+  if (data.startsWith("qu_ed_")) {
+    const parts = data.split("_");
+    const type = parts[2]; // txt, exp, ans
+    const qId = parts[3];
+    const qIdx = parseInt(parts[4], 10);
+    const page = parts[5];
+
+    if (type === "txt") {
+      userSessions[chatId] = { step: 'qu_mod_text', quizId: qId, qIdx, page };
+      await bot.sendMessage(chatId, "Enter new question text:");
+    } else if (type === "exp") {
+      userSessions[chatId] = { step: 'qu_mod_exp', quizId: qId, qIdx, page };
+      await bot.sendMessage(chatId, "Enter new explanation:");
+    } else if (type === "ans") {
+      const quiz = await CustomQuizModel.findOne({ quizId: qId });
+      const q = quiz.questions[qIdx];
+      const btns = q.options.map((opt, i) => ([{ text: `${i + 1}. ${opt}`, callback_data: `qu_set_ans_${qId}_${qIdx}_${i}_${page}` }]));
+      await bot.editMessageText("Select correct answer index:", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns } });
+    }
+  }
+
+  if (data.startsWith("qu_set_ans_")) {
+    const parts = data.split("_");
+    const qId = parts[3];
+    const qIdx = parseInt(parts[4], 10);
+    const ansIdx = parseInt(parts[5], 10);
+    const page = parts[6];
+
+    const quiz = await CustomQuizModel.findOne({ quizId: qId });
+    quiz.questions[qIdx].answer = ansIdx;
+    await quiz.save();
+    
+    await bot.answerCallbackQuery(query.id, { text: "✅ Answer updated." });
+    // Reload info view
+    const q = quiz.questions[qIdx];
+    const qText = `❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+    await bot.editMessageText(qText, {
+        chat_id: chatId,
+        message_id: messageId,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${qId}_${qIdx}_${page}` }],
+            [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${qId}_${qIdx}_${page}` }],
+            [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${qId}_${qIdx}_${page}` }],
+            [{ text: "🗑 Delete Question", callback_data: `qu_del_${qId}_${qIdx}_${page}` }],
+            [{ text: "🔙 Back", callback_data: `qns_page_${qId}_${page}` }]
+          ]
+        }
+    });
+  }
+
+  if (data.startsWith("qu_del_")) {
+    const parts = data.split("_");
+    const qId = parts[2];
+    const qIdx = parseInt(parts[3], 10);
+    const page = parts[4];
+    
+    const quiz = await CustomQuizModel.findOne({ quizId: qId });
+    quiz.questions.splice(qIdx, 1);
+    await quiz.save();
+    
+    await bot.answerCallbackQuery(query.id, { text: "🗑 Question deleted." });
+    await showQuestionsPage(chatId, messageId, qId, parseInt(page, 10));
   }
 
   // Extra specific handlers for editing
@@ -479,11 +621,7 @@ bot.on('callback_query', async (query) => {
       userSessions[chatId] = { step: 'edit_time', quizId: qId };
       await bot.sendMessage(chatId, "Enter seconds per question (10-600):");
     } else if (field === "qns") {
-      const quiz = await CustomQuizModel.findOne({ quizId: qId });
-      let qText = `❓ *Questions of: ${quiz.title}*\n\nClick to delete a question:`;
-      const buttons = quiz.questions.map((q, i) => ([{ text: `🗑 [${i + 1}] ${q.question.substring(0, 25)}...`, callback_data: `q_del_${qId}_${i}` }]));
-      buttons.push([{ text: "🔙 Back", callback_data: `edit_${qId}` }]);
-      await bot.editMessageText(qText, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: buttons } });
+      await showQuestionsPage(chatId, messageId, qId, 0);
     }
   }
 
@@ -716,6 +854,54 @@ async function saveQuiz(chatId, fromId, questions) {
   }
 }
 
+// ─── Question List Helper (Paginated) ──────────────────────────────────────────
+
+async function showQuestionsPage(chatId, messageId, qId, page = 0) {
+  const limit = 5;
+  const skip = page * limit;
+
+  try {
+    const quiz = await CustomQuizModel.findOne({ quizId: qId });
+    if (!quiz) return bot.sendMessage(chatId, "❌ Quiz not found.");
+
+    const total = quiz.questions.length;
+    const questions = quiz.questions.slice(skip, skip + limit);
+
+    if (questions.length === 0 && page > 0) return showQuestionsPage(chatId, messageId, qId, page - 1);
+
+    let text = `❓ *Questions of: ${quiz.title}*\nTotal: ${total} | Page ${page + 1}`;
+    const keyboard = [];
+
+    questions.forEach((q, i) => {
+      const idx = skip + i;
+      keyboard.push([{ text: `📄 [${idx + 1}] ${q.question.substring(0, 30)}...`, callback_data: `qu_info_${qId}_${idx}_${page}` }]);
+    });
+
+    const navRow = [];
+    if (page > 0) navRow.push({ text: "⬅️ Previous", callback_data: `qns_page_${qId}_${page - 1}` });
+    if (skip + limit < total) navRow.push({ text: "Next ➡️", callback_data: `qns_page_${qId}_${page + 1}` });
+    if (navRow.length > 0) keyboard.push(navRow);
+
+    keyboard.push([{ text: "🔙 Back to Quiz", callback_data: `edit_${qId}` }]);
+
+    const options = {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: keyboard }
+    };
+
+    if (messageId) {
+      bot.editMessageText(text, options);
+    } else {
+      bot.sendMessage(chatId, text, options);
+    }
+  } catch (err) {
+    console.error("Error fetching questions:", err);
+    bot.sendMessage(chatId, "❌ An error occurred while fetching questions.");
+  }
+}
+
 // ─── /myquiz — list user's quizzes ───────────────────────────────────────────
 
 bot.onText(/\/myquiz/, async (msg) => {
@@ -766,6 +952,35 @@ async function showQuizzesPage(chatId, userId, page = 0) {
     bot.sendMessage(chatId, "❌ An error occurred while fetching your quizzes.");
   }
 }
+
+// ─── Inline Query Handler for Sharing ──────────────────────────────────────────
+// This allows users to search for a quiz and send "/quiz ID" as a plain message.
+
+bot.on('inline_query', async (query) => {
+  const qStr = query.query.trim(); 
+  if (qStr.startsWith('quiz ')) {
+    const quizId = qStr.split(' ')[1];
+    try {
+      const quiz = await CustomQuizModel.findOne({ quizId: quizId });
+      if (quiz) {
+        const results = [
+          {
+            type: 'article',
+            id: quizId,
+            title: `🚀 Share: ${quiz.title}`,
+            description: `Click to send: /quiz ${quizId}`,
+            input_message_content: {
+              message_text: `/quiz ${quizId}`
+            }
+          }
+        ];
+        bot.answerInlineQuery(query.id, results);
+      }
+    } catch (e) {
+      console.error("Inline query error:", e);
+    }
+  }
+});
 
 console.log("Secondary bot initialized.");
 

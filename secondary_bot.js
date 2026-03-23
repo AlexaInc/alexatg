@@ -254,56 +254,56 @@ bot.on('message', async (msg) => {
 
     // ── Granular Question Editing ──
     case 'qu_mod_text': {
-        const { quizId, qIdx, page } = session;
-        const quiz = await CustomQuizModel.findOne({ quizId });
+      const { quizId, qIdx, page } = session;
+      const quiz = await CustomQuizModel.findOne({ quizId });
 
-        if (text !== '/skip') {
-          quiz.questions[qIdx].question = text;
-          await quiz.save();
+      if (text !== '/skip') {
+        quiz.questions[qIdx].question = text;
+        await quiz.save();
+      }
+
+      delete userSessions[chatId];
+      const q = quiz.questions[qIdx];
+      const updated = (text === '/skip') ? "⚠️ Change cancelled" : "✅ Question updated!";
+      const qText = `${updated}\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+      bot.sendMessage(chatId, qText, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${quizId}_${qIdx}_${page}` }],
+            [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${quizId}_${qIdx}_${page}` }],
+            [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${quizId}_${qIdx}_${page}` }],
+            [{ text: "🗑 Delete Question", callback_data: `qu_del_${quizId}_${qIdx}_${page}` }],
+            [{ text: "🔙 Back", callback_data: `qns_page_${quizId}_${page}` }]
+          ]
         }
-        
-        delete userSessions[chatId];
-        const q = quiz.questions[qIdx];
-        const updated = (text === '/skip') ? "⚠️ Change cancelled" : "✅ Question updated!";
-        const qText = `${updated}\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
-        bot.sendMessage(chatId, qText, {
-            parse_mode: 'Markdown',
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${quizId}_${qIdx}_${page}` }],
-                    [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${quizId}_${qIdx}_${page}` }],
-                    [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${quizId}_${qIdx}_${page}` }],
-                    [{ text: "🗑 Delete Question", callback_data: `qu_del_${quizId}_${qIdx}_${page}` }],
-                    [{ text: "🔙 Back", callback_data: `qns_page_${quizId}_${page}` }]
-                ]
-            }
-        });
-        break;
+      });
+      break;
     }
 
     case 'qu_mod_exp': {
-        const { quizId, qIdx, page } = session;
-        const quiz = await CustomQuizModel.findOne({ quizId });
-        quiz.questions[qIdx].explanation = (text === '/skip') ? '' : text;
-        await quiz.save();
-        
-        delete userSessions[chatId];
-        const q = quiz.questions[qIdx];
-        const updated = (text === '/skip') ? "🧹 Explanation cleared!" : "✅ Explanation updated!";
-        const qText = `${updated}\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
-        bot.sendMessage(chatId, qText, {
-            parse_mode: 'Markdown',
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${quizId}_${qIdx}_${page}` }],
-                    [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${quizId}_${qIdx}_${page}` }],
-                    [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${quizId}_${qIdx}_${page}` }],
-                    [{ text: "🗑 Delete Question", callback_data: `qu_del_${quizId}_${qIdx}_${page}` }],
-                    [{ text: "🔙 Back", callback_data: `qns_page_${quizId}_${page}` }]
-                ]
-            }
-        });
-        break;
+      const { quizId, qIdx, page } = session;
+      const quiz = await CustomQuizModel.findOne({ quizId });
+      quiz.questions[qIdx].explanation = (text === '/skip') ? '' : text;
+      await quiz.save();
+
+      delete userSessions[chatId];
+      const q = quiz.questions[qIdx];
+      const updated = (text === '/skip') ? "🧹 Explanation cleared!" : "✅ Explanation updated!";
+      const qText = `${updated}\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+      bot.sendMessage(chatId, qText, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${quizId}_${qIdx}_${page}` }],
+            [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${quizId}_${qIdx}_${page}` }],
+            [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${quizId}_${qIdx}_${page}` }],
+            [{ text: "🗑 Delete Question", callback_data: `qu_del_${quizId}_${qIdx}_${page}` }],
+            [{ text: "🔙 Back", callback_data: `qns_page_${quizId}_${page}` }]
+          ]
+        }
+      });
+      break;
     }
 
     default:
@@ -389,23 +389,23 @@ bot.on('callback_query', async (query) => {
       }
     });
   } else if (data === "confirm_last_mod" && session && session.pendingPoll) {
-      // Re-show confirmation menu
+    // Re-show confirmation menu
     const q = session.pendingPoll;
     const qText = `❓ *Question Confirmation (Modified)*\n\n*Question:* ${q.question}\n*Options:* \n${q.options.map((o, i) => `${i === q.answer ? '✅' : '❌'} ${o}`).join('\n')}\n${q.explanation ? `\n📖 *Explanation:* ${q.explanation}` : ''}`;
     await bot.editMessageText(qText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "✅ Confirm & Next", callback_data: "confirm_poll" },
-              { text: "✏️ Modify", callback_data: "modify_poll" },
-              { text: "🗑 Discard", callback_data: "discard_poll" }
-            ]
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Confirm & Next", callback_data: "confirm_poll" },
+            { text: "✏️ Modify", callback_data: "modify_poll" },
+            { text: "🗑 Discard", callback_data: "discard_poll" }
           ]
-        }
-      });
+        ]
+      }
+    });
   }
 
   // ── Mode selection ──
@@ -526,7 +526,7 @@ bot.on('callback_query', async (query) => {
     if (!q) return bot.answerCallbackQuery(query.id, { text: "❌ Question not found." });
 
     const qText = `❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
-    
+
     await bot.editMessageText(qText, {
       chat_id: chatId,
       message_id: messageId,
@@ -576,24 +576,24 @@ bot.on('callback_query', async (query) => {
     const quiz = await CustomQuizModel.findOne({ quizId: qId });
     quiz.questions[qIdx].answer = ansIdx;
     await quiz.save();
-    
+
     await bot.answerCallbackQuery(query.id, { text: "✅ Answer updated." });
     // Reload info view
     const q = quiz.questions[qIdx];
     const qText = `❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
     await bot.editMessageText(qText, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${qId}_${qIdx}_${page}` }],
-            [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${qId}_${qIdx}_${page}` }],
-            [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${qId}_${qIdx}_${page}` }],
-            [{ text: "🗑 Delete Question", callback_data: `qu_del_${qId}_${qIdx}_${page}` }],
-            [{ text: "🔙 Back", callback_data: `qns_page_${qId}_${page}` }]
-          ]
-        }
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${qId}_${qIdx}_${page}` }],
+          [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${qId}_${qIdx}_${page}` }],
+          [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${qId}_${qIdx}_${page}` }],
+          [{ text: "🗑 Delete Question", callback_data: `qu_del_${qId}_${qIdx}_${page}` }],
+          [{ text: "🔙 Back", callback_data: `qns_page_${qId}_${page}` }]
+        ]
+      }
     });
   }
 
@@ -602,11 +602,11 @@ bot.on('callback_query', async (query) => {
     const qId = parts[2];
     const qIdx = parseInt(parts[3], 10);
     const page = parts[4];
-    
+
     const quiz = await CustomQuizModel.findOne({ quizId: qId });
     quiz.questions.splice(qIdx, 1);
     await quiz.save();
-    
+
     await bot.answerCallbackQuery(query.id, { text: "🗑 Question deleted." });
     await showQuestionsPage(chatId, messageId, qId, parseInt(page, 10));
   }
@@ -715,7 +715,7 @@ bot.on('callback_query', async (query) => {
         inline_keyboard: [
           [
             { text: "✏️ Edit Details", callback_data: `edit_${qId}` },
-            { text: "📤 Share", switch_inline_query: `quiz ${qId}` }
+            { text: "📤 Share", url: `https://t.me/share/url?url=/quiz ${qId}` }
           ],
           [{ text: "🗑 Delete Quiz", callback_data: `confirm_del_${qId}` }],
           [{ text: "🔙 Back to List", callback_data: `list_page_${page}` }]
@@ -850,7 +850,7 @@ async function saveQuiz(chatId, fromId, questions) {
       {
         parse_mode: 'Markdown',
         reply_markup: {
-          inline_keyboard: [[{ text: "📤 Share", switch_inline_query: `quiz ${quizId}` }]]
+          inline_keyboard: [[{ text: "📤 Share", url: `https://t.me/share/url?url=/quiz ${quizId}` }]]
         }
       }
     );
@@ -963,7 +963,7 @@ async function showQuizzesPage(chatId, userId, page = 0) {
 // This allows users to search for a quiz and send "/quiz ID" as a plain message.
 
 bot.on('inline_query', async (query) => {
-  const qStr = query.query.trim(); 
+  const qStr = query.query.trim();
   if (qStr.startsWith('quiz ')) {
     const quizId = qStr.split(' ')[1];
     try {

@@ -1299,13 +1299,8 @@ module.exports = function (bot, deps) {
         for (const chunk of chunks) {
           let mentions = "";
           chunk.forEach((m, index) => {
-            let mention = "";
-            if (m.username) {
-              mention = `@${m.username}`;
-            } else {
-              const name = m.firstName || "User";
-              mention = `<a href="tg://user?id=${m.userId}">${escapeHTML(name)}</a>`;
-            }
+            const displayName = m.firstName || m.username || "User";
+            const mention = `<a href="tg://user?id=${m.userId}">${escapeHTML(displayName)}</a>`;
             mentions += mention + (index === chunk.length - 1 ? "" : " ");
           });
 

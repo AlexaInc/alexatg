@@ -1,6 +1,6 @@
 module.exports = function (bot, deps) {
   const { botOWNER_IDS, UserMap, handlers } = deps;
-  const { getTarget, handleAnonymous } = handlers;
+  const { getTarget, handleAnonymous, escapeHTML } = handlers;
 
   // --- MUTE COMMAND ---
   bot.onText(/^\/mu/, async (msg) => {
@@ -1304,14 +1304,13 @@ module.exports = function (bot, deps) {
               mention = `@${m.username}`;
             } else {
               const name = m.firstName || "User";
-              const escapedName = name.replace(/[_*\[\]`]/g, "\\$&");
-              mention = `[${escapedName}](tg://user?id=${m.userId})`;
+              mention = `<a href="tg://user?id=${m.userId}">${escapeHTML(name)}</a>`;
             }
             mentions += mention + (index === chunk.length - 1 ? "" : " ");
           });
 
-          await bot.sendMessage(chatId, (content || "") + "\n\n" + mentions, {
-            parse_mode: 'Markdown',
+          await bot.sendMessage(chatId, (escapeHTML(content) || "") + "\n\n" + mentions, {
+            parse_mode: 'HTML',
             reply_to_message_id: msg.reply_to_message ? msg.reply_to_message.message_id : msg.message_id
           });
           if (chunks.length > 1) await handlers.sleep(1000);
@@ -1326,24 +1325,24 @@ module.exports = function (bot, deps) {
 
         admins.forEach(admin => {
           if (!admin.user.is_bot) {
-            adminMentions += `[${zeroWidthSpace}](tg://user?id=${admin.user.id})`;
+            adminMentions += `<a href="tg://user?id=${admin.user.id}">${zeroWidthSpace}</a>`;
           }
         });
 
-        let reportText = "👮‍♂️ **Admin Attention Required**\n";
-        const reporterName = (msg.from.first_name || "User").replace(/[_*\[\]`]/g, "\\$&");
-        reportText += `**Reported by:** [${reporterName}](tg://user?id=${msg.from.id})\n`;
+        let reportText = "👮‍♂️ <b>Admin Attention Required</b>\n";
+        const reporterName = msg.from.first_name || "User";
+        reportText += `<b>Reported by:</b> <a href="tg://user?id=${msg.from.id}">${escapeHTML(reporterName)}</a>\n`;
 
         if (msg.reply_to_message) {
           const reportedUser = msg.reply_to_message.from;
-          const reportedUserName = (reportedUser.first_name || "User").replace(/[_*\[\]`]/g, "\\$&");
-          reportText += `**Reported user:** [${reportedUserName}](tg://user?id=${reportedUser.id})\n`;
+          const reportedUserName = reportedUser.first_name || "User";
+          reportText += `<b>Reported user:</b> <a href="tg://user?id=${reportedUser.id}">${escapeHTML(reportedUserName)}</a>\n`;
         }
 
         reportText += "\n" + adminMentions;
 
         await bot.sendMessage(chatId, reportText, {
-          parse_mode: 'Markdown',
+          parse_mode: 'HTML',
           reply_to_message_id: msg.reply_to_message ? msg.reply_to_message.message_id : msg.message_id
         });
       }

@@ -1,6 +1,8 @@
 const axios = require('axios');
 const https = require('https');
 
+const adminCache = {};
+
 function getMessageType(msg) {
   if (!msg) return null;
 
@@ -121,7 +123,21 @@ async function getProfilePhoto(bot, userId) {
   return undefined;
 }
 
-async function checkAdminPermissions(bot, msg, botOWNER_IDS, BOT_ID) {
+async function getAdmins(bot, chatId, forceRefresh = false) {
+  if (!forceRefresh && adminCache[chatId]) {
+    return adminCache[chatId];
+  }
+  try {
+    const admins = await bot.getChatAdministrators(chatId);
+    adminCache[chatId] = admins;
+    return admins;
+  } catch (err) {
+    console.error(`Error fetching admins for ${chatId}:`, err);
+    return adminCache[chatId] || [];
+  }
+}
+
+async function checkAdminPermissions(bot, msg, botOWNER_IDS, BOT_ID, requiredPermission = null, forceRefresh = false) {
   const chatId = msg.chat.id;
   const userId = msg.from.id;
   const chatType = msg.chat.type;
@@ -131,23 +147,39 @@ async function checkAdminPermissions(bot, msg, botOWNER_IDS, BOT_ID) {
   }
 
   try {
+    const admins = await getAdmins(bot, chatId, forceRefresh);
     const isBotOwner = botOWNER_IDS.includes(userId);
-    if (!isBotOwner) {
-      const userMember = await bot.getChatMember(chatId, userId);
-      if (!['creator', 'administrator'].includes(userMember.status)) {
-        return "You must be an admin in this group (or the bot owner) to use this command.";
+
+    const userMember = admins.find(a => a.user.id === userId);
+    const isAdmin = ['creator', 'administrator'].includes(userMember?.status);
+
+    if (!isBotOwner && !isAdmin) {
+      return "You must be an admin in this group (or the bot owner) to use this command.";
+    }
+
+    if (requiredPermission && !isBotOwner) {
+      if (userMember.status !== 'creator' && !userMember[requiredPermission]) {
+        // Instead of returning error, return an object indicating missing permission
+        // to trigger the "pin request" logic if needed.
+        return { errorType: 'MISSING_PERMISSION', missingPermission: requiredPermission };
       }
     }
 
     if (!BOT_ID) {
       return "Bot is still initializing, please try again in a moment.";
     }
-    const botMember = await bot.getChatMember(chatId, BOT_ID);
-    if (botMember.status !== 'administrator') {
+
+    const botMember = admins.find(a => a.user.id === BOT_ID);
+    if (!botMember || botMember.status !== 'administrator') {
       return "I must be an admin in this chat to work.";
     }
 
-    if (!botMember.can_delete_messages) {
+    if (requiredPermission && !botMember[requiredPermission]) {
+      return `I am an admin, but I am missing the '${requiredPermission.replace('can_', '').replace(/_/g, ' ')}' permission.`;
+    }
+
+    // Default check if no specific permission is requested
+    if (!requiredPermission && !botMember.can_delete_messages) {
       return "I'm an admin, but I'm missing the 'Can delete messages' permission.";
     }
 
@@ -285,6 +317,7 @@ module.exports = {
   downloadImage,
   getProfilePhoto,
   checkAdminPermissions,
+  getAdmins,
   saveUserMap,
   resolveUsername,
   getTarget,

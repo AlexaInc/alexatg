@@ -1343,5 +1343,55 @@ module.exports = function (bot, deps) {
     }
   });
 
+  // --- PIN COMMAND ---
+  bot.onText(/^\/pin/, async (msg) => {
+    const chatId = msg.chat.id;
+    const result = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID, 'can_pin_messages');
+
+    const isMissingPerm = result && typeof result === 'object' && result.errorType === 'MISSING_PERMISSION';
+    const isNotAdmin = typeof result === 'string' && result.includes("You must be an admin");
+
+    if (isMissingPerm || isNotAdmin) {
+      const admins = await deps.handlers.getAdmins(bot, chatId);
+      const pinAdmins = admins.filter(a => (a.status === 'creator' || a.can_pin_messages) && !a.user.is_bot);
+      const zeroWidthSpace = "\u200B";
+      const mentions = pinAdmins.map(a => `[${zeroWidthSpace}](tg://user?id=${a.user.id})`).join('');
+      return bot.sendMessage(chatId, `📌 **Pin Request** by [${msg.from.first_name}](tg://user?id=${msg.from.id})${mentions}`, { parse_mode: 'Markdown' });
+    }
+
+    if (typeof result === 'string') return bot.sendMessage(chatId, result);
+
+    if (!msg.reply_to_message) return bot.sendMessage(chatId, "⚠️ Reply to a message you want to pin.");
+
+    bot.pinChatMessage(chatId, msg.reply_to_message.message_id)
+      .then(() => bot.sendMessage(chatId, "✅ Message pinned."))
+      .catch(() => bot.sendMessage(chatId, "❌ Failed to pin message."));
+  });
+
+  // --- DELETE COMMAND ---
+  bot.onText(/^\/del/, async (msg) => {
+    const chatId = msg.chat.id;
+    const result = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID, 'can_delete_messages');
+    if (result && typeof result === 'string') return bot.sendMessage(chatId, result);
+
+    // Also allow missing permission object for consistency if needed, but del is usually admin only
+    if (result && typeof result === 'object' && result.errorType === 'MISSING_PERMISSION') {
+      return bot.sendMessage(chatId, "❌ You don't have permission to delete messages.");
+    }
+
+    if (!msg.reply_to_message) return bot.sendMessage(chatId, "⚠️ Reply to a message you want to delete.");
+
+    bot.deleteMessage(chatId, msg.reply_to_message.message_id)
+      .then(() => bot.deleteMessage(chatId, msg.message_id).catch(() => { }))
+      .catch(() => bot.sendMessage(chatId, "❌ Failed to delete message."));
+  });
+
+  // --- REFRESH/RELOAD COMMANDS ---
+  bot.onText(/^\/(refresh|reload)/, async (msg) => {
+    const chatId = msg.chat.id;
+    await deps.handlers.getAdmins(bot, chatId, true);
+    bot.sendMessage(chatId, "✅ Admin cache refreshed for this group.");
+  });
+
   deps.admin = { handleUnmaskCallback, handleVerifyCallback, handleAntilinkCallback, handleAntilinkActionCallback, handleGenericWarnCallback, handlePromoteCallback };
 };

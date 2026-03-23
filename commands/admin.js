@@ -1277,14 +1277,17 @@ module.exports = function (bot, deps) {
         // Admin or Owner only for @all
         const caller = await bot.getChatMember(chatId, userId);
         const hasPerm = ["creator", "administrator"].includes(caller.status) || botOWNER_IDS.includes(userId);
-        
+
         if (!hasPerm) {
           return bot.sendMessage(chatId, "⚠️ Only administrators can use the @all tag.");
         }
 
-        const content = text.replace(/@(all|tagall|everyone)/gi, '').trim();
-        if (!content && !msg.reply_to_message) {
+        let content = text.replace(/@(all|tagall|everyone)/gi, '').trim();
+        if (!content && !msg.reply_to_message.text) {
           return bot.sendMessage(chatId, "⚠️ **Content empty!** Please provide a message or reply to one.");
+        }
+        if (msg.reply_to_message) {
+          content = msg.reply_to_message.text || "";
         }
 
         // Search for all unique users seen by the bot in this group

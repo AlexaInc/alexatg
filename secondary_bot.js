@@ -395,7 +395,11 @@ bot.on('callback_query', async (query) => {
   else if (data.startsWith("del_quiz_")) {
     const qId = data.split("_")[2];
     await CustomQuizModel.deleteOne({ quizId: qId });
-    await bot.editMessageText("🗑 Quiz deleted successfully.", { chat_id: chatId, message_id: messageId });
+    await bot.editMessageText("🗑 Quiz deleted successfully.", {
+      chat_id: chatId,
+      message_id: messageId,
+      reply_markup: { inline_keyboard: [[{ text: "🔙 Back to List", callback_data: "list_page_0" }]] }
+    });
   }
 
   else if (data === "cancel_del") {
@@ -424,7 +428,7 @@ bot.on('callback_query', async (query) => {
             [{ text: "⏱ Change Time/Q", callback_data: `ed_time_${qId}` }],
             [{ text: "🗑 Edit Questions", callback_data: `ed_qns_${qId}` }],
             [{ text: "➕ Add Questions", callback_data: `add_qns_${qId}` }],
-            [{ text: "🔙 Back to List", callback_data: "close_menu" }]
+            [{ text: "🔙 Back", callback_data: `info_${qId}_0` }]
           ]
         }
       });
@@ -517,6 +521,63 @@ bot.on('callback_query', async (query) => {
 
   if (data === "close_menu") {
     await bot.deleteMessage(chatId, messageId);
+  }
+
+  // ── Pagination and List ──
+  if (data.startsWith("list_page_")) {
+    const page = parseInt(data.split("_")[2], 10);
+    const limit = 5;
+    const skip = page * limit;
+    const userId = query.from.id.toString();
+
+    const total = await CustomQuizModel.countDocuments({ creatorId: userId });
+    const userQuizzes = await CustomQuizModel.find({ creatorId: userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const keyboard = [];
+    for (const quiz of userQuizzes) {
+      keyboard.push([{ text: `📄 ${quiz.title}`, callback_data: `info_${quiz.quizId}_${page}` }]);
+    }
+    const navRow = [];
+    if (page > 0) navRow.push({ text: "⬅️ Previous", callback_data: `list_page_${page - 1}` });
+    if (skip + limit < total) navRow.push({ text: "Next ➡️", callback_data: `list_page_${page + 1}` });
+    if (navRow.length > 0) keyboard.push(navRow);
+
+    await bot.editMessageText(`📚 *Your Quizzes*\nPage ${page + 1}`, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: keyboard }
+    });
+  }
+
+  if (data.startsWith("info_")) {
+    const parts = data.split("_");
+    const qId = parts[1];
+    const page = parts[2];
+
+    const quiz = await CustomQuizModel.findOne({ quizId: qId });
+    if (!quiz) return bot.answerCallbackQuery(query.id, { text: "❌ Quiz not found." });
+
+    const text = `🏷 *${quiz.title}*\n🆔 \`${quiz.quizId}\` · ${quiz.questions.length} Qs · ⏱ ${quiz.openPeriod}s/Q${quiz.description ? `\n📄 _${quiz.description}_` : ''}`;
+
+    await bot.editMessageText(text, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✏️ Edit Details", callback_data: `edit_${qId}` },
+            { text: "📤 Share", switch_inline_query: `quiz ${qId}` }
+          ],
+          [{ text: "🗑 Delete Quiz", callback_data: `confirm_del_${qId}` }],
+          [{ text: "🔙 Back to List", callback_data: `list_page_${page}` }]
+        ]
+      }
+    });
   }
 
   if (data === "confirm_json_save" && session && session.polls) {
@@ -660,38 +721,51 @@ async function saveQuiz(chatId, fromId, questions) {
 bot.onText(/\/myquiz/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
+  await showQuizzesPage(chatId, userId, 0);
+});
+
+async function showQuizzesPage(chatId, userId, page = 0) {
+  const limit = 5;
+  const skip = page * limit;
 
   try {
-    const userQuizzes = await CustomQuizModel.find({ creatorId: userId }).sort({ createdAt: -1 });
+    const total = await CustomQuizModel.countDocuments({ creatorId: userId });
+    const userQuizzes = await CustomQuizModel.find({ creatorId: userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     if (!userQuizzes || userQuizzes.length === 0) {
-      return bot.sendMessage(chatId, "⚠️ You haven't created any quizzes yet.\nCreate one using /setquiz!");
+      if (page === 0) {
+        return bot.sendMessage(chatId, "⚠️ You haven't created any quizzes yet.\nCreate one using /setquiz!");
+      } else {
+        return; // Page doesn't exist
+      }
     }
 
-    bot.sendMessage(chatId, `📚 *Your Quizzes (${userQuizzes.length})*`, { parse_mode: "Markdown" });
+    let text = `📚 *Your Quizzes (Total: ${total})*\nPage ${page + 1}`;
+    const keyboard = [];
 
     for (const quiz of userQuizzes) {
-      const text = `🏷 *${quiz.title}*\n🆔 \`${quiz.quizId}\` · ${quiz.questions.length} Qs · ⏱ ${quiz.openPeriod}s/Q${quiz.description ? `\n📄 _${quiz.description}_` : ''}`;
-      await bot.sendMessage(chatId, text, {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [
-              { text: "✏️ Edit", callback_data: `edit_${quiz.quizId}` },
-              { text: "📤 Share", switch_inline_query: `quiz ${quiz.quizId}` }
-            ],
-            [
-              { text: "🗑 Delete", callback_data: `confirm_del_${quiz.quizId}` }
-            ]
-          ]
-        }
-      });
+      keyboard.push([{ text: `📄 ${quiz.title}`, callback_data: `info_${quiz.quizId}_${page}` }]);
     }
+
+    const navRow = [];
+    if (page > 0) navRow.push({ text: "⬅️ Previous", callback_data: `list_page_${page - 1}` });
+    if (skip + limit < total) navRow.push({ text: "Next ➡️", callback_data: `list_page_${page + 1}` });
+    if (navRow.length > 0) keyboard.push(navRow);
+
+    const options = {
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: keyboard }
+    };
+
+    bot.sendMessage(chatId, text, options);
   } catch (err) {
     console.error("Error fetching user quizzes:", err);
     bot.sendMessage(chatId, "❌ An error occurred while fetching your quizzes.");
   }
-});
+}
 
 console.log("Secondary bot initialized.");
 

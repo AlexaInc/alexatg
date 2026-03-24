@@ -1343,6 +1343,7 @@ module.exports = function (bot, deps) {
 
   // --- PIN COMMAND ---
   bot.onText(/^\/pin/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/pin', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const result = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID, 'can_pin_messages');
 
@@ -1381,6 +1382,7 @@ module.exports = function (bot, deps) {
 
   // --- DELETE COMMAND ---
   bot.onText(/^\/del(?:\s+(all|me|my))?/, async (msg, match) => {
+    if (!deps.handlers.checkCommand(msg, '/del', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const arg = match[1]?.toLowerCase();
     const isAll = arg === 'all';
@@ -1470,7 +1472,8 @@ module.exports = function (bot, deps) {
   });
 
   // --- CLEANCOMMAND ---
-  bot.onText(/^\/(cleancommand|clean)(\s+all|\s+other|\s+me)?/i, async (msg, match) => {
+  bot.onText(/^\/(cleancommand)(\s+all|\s+other|\s+me)?/i, async (msg, match) => {
+    if (!deps.handlers.checkCommand(msg, '/cleancommand', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
 
@@ -1488,7 +1491,8 @@ module.exports = function (bot, deps) {
     bot.sendMessage(chatId, `✅ **Clean Command** is now **ENABLED**.\nMode: \`${mode}\``, { parse_mode: 'Markdown' });
   });
 
-  bot.onText(/^\/(keepcommand|keep)/i, async (msg) => {
+  bot.onText(/^\/(keepcommand)/i, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/keepcommand', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
 

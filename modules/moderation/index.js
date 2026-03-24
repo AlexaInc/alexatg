@@ -17,6 +17,7 @@ module.exports = function (bot, deps) {
 
     // ====== New Member Handler ======
     bot.on("new_chat_members", async (msg) => {
+        console.log(`[New Member] Triggered in chat ${msg.chat.id}`);
         try {
             const chatId = msg.chat.id;
             const adder = msg.from;
@@ -53,6 +54,7 @@ module.exports = function (bot, deps) {
 
             // ====== Welcome Message Logic ======
             const settings = await WelcomeSettings.findOne({ groupId: String(chatId) });
+            console.log(`[Welcome] Settings for ${chatId}: enabled=${settings?.welcomeEnabled}`);
             if (settings?.welcomeEnabled) {
                 for (const member of newMembers) {
                     if (member.id === me.id) continue;

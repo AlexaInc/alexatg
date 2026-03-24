@@ -1,4 +1,5 @@
 module.exports = function (bot, deps) {
+    console.log("✅ Welcome module loaded and commands registering...");
     const { WelcomeSettings, botOWNER_IDS } = deps;
 
     const checkAdmin = async (chatId, userId) => {

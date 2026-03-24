@@ -166,45 +166,17 @@ module.exports = function (bot, deps) {
 
             const entity = await deps.handlers.getJoinedEntity(client, bot, chatId);
 
-            let allMessages = [];
+            let processedCount = 0;
             let offsetId = 0;
             const chunkSize = 100;
-
-            while (allMessages.length < limit) {
-                const chunkLimit = Math.min(chunkSize, limit - allMessages.length);
-                const chunk = await client.getMessages(entity, { limit: chunkLimit, offsetId });
-                if (!chunk || chunk.length === 0) break;
-
-                allMessages.push(...chunk);
-                offsetId = chunk[chunk.length - 1].id;
-
-                await bot.editMessageText(`⏳ **Syncing history...**\nDownloaded: \`${allMessages.length}\` / \`${limit}\` messages.`, {
-                    chat_id: msg.chat.id,
-                    message_id: statusMsg.message_id,
-                    parse_mode: 'Markdown'
-                }).catch(() => { });
-
-                if (allMessages.length < limit) {
-                    await new Promise(r => setTimeout(r, 2000)); // Rate limit protection
-                }
-            }
-
-            if (allMessages.length === 0) {
-                await client.disconnect();
-                return bot.editMessageText("ℹ️ No historical messages found.", { chat_id: msg.chat.id, message_id: statusMsg.message_id });
-            }
 
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const weekStart = new Date(now);
             weekStart.setDate(now.getDate() - now.getDay());
 
-            const userCounts = {}; // userId -> { overall, today, week, name }
-            let totalGroupMessages = 0;
-            let totalGroupToday = 0;
-            let totalGroupWeek = 0;
-
-            // Fetch participants to resolve names if possible (more reliable than m.sender)
+            // Cache participants once to save RAM/Time
+            await bot.editMessageText(`⏳ **Syncing...**\nResolving member names...`, { chat_id: msg.chat.id, message_id: statusMsg.message_id }).catch(() => { });
             const chatUsers = await client.getParticipants(entity).catch(() => []);
             const userCache = {};
             chatUsers.forEach(u => {
@@ -214,79 +186,68 @@ module.exports = function (bot, deps) {
                 };
             });
 
-            for (const m of allMessages) {
-                if (!m.fromId || !m.fromId.userId) continue;
-                const uid = m.fromId.userId.toString();
+            while (processedCount < limit) {
+                const chunkLimit = Math.min(chunkSize, limit - processedCount);
+                const chunk = await client.getMessages(entity, { limit: chunkLimit, offsetId });
+                if (!chunk || chunk.length === 0) break;
 
-                // Bot detection
-                const cachedUser = userCache[uid];
-                if (cachedUser && cachedUser.bot) continue;
-                if (m.sender && m.sender.bot) continue;
+                const userCounts = {}; // userId -> { overall, today, week, name }
+                let chunkTotal = 0;
+                let chunkToday = 0;
+                let chunkWeek = 0;
 
-                const date = new Date(m.date * 1000);
+                for (const m of chunk) {
+                    if (!m.fromId || !m.fromId.userId) continue;
+                    const uid = m.fromId.userId.toString();
+                    const cached = userCache[uid];
+                    if (cached && cached.bot) continue;
 
-                if (!userCounts[uid]) {
-                    let fullName = "User";
-                    if (cachedUser) {
-                        fullName = cachedUser.name;
-                    } else if (m.sender) {
-                        fullName = (m.sender.firstName + (m.sender.lastName ? " " + m.sender.lastName : "")).trim();
+                    const date = new Date(m.date * 1000);
+                    if (!userCounts[uid]) {
+                        userCounts[uid] = { overall: 0, today: 0, week: 0, name: cached ? cached.name : "User" };
                     }
-                    userCounts[uid] = { overall: 0, today: 0, week: 0, name: fullName };
+                    userCounts[uid].overall++;
+                    chunkTotal++;
+                    if (date >= today) { userCounts[uid].today++; chunkToday++; }
+                    if (date >= weekStart) { userCounts[uid].week++; chunkWeek++; }
                 }
-                userCounts[uid].overall++;
-                totalGroupMessages++;
 
-                if (date >= today) {
-                    userCounts[uid].today++;
-                    totalGroupToday++;
-                }
-                if (date >= weekStart) {
-                    userCounts[uid].week++;
-                    totalGroupWeek++;
-                }
-            }
-
-            // Perform updates in moderate batches
-            const userIds = Object.keys(userCounts);
-            for (let i = 0; i < userIds.length; i++) {
-                const uid = userIds[i];
-                const u = userCounts[uid];
-                await Activity.updateOne(
-                    { chatId, userId: uid },
-                    {
+                // Batch update DB for this chunk immediately
+                const userIds = Object.keys(userCounts);
+                for (const uid of userIds) {
+                    const u = userCounts[uid];
+                    await Activity.updateOne({ chatId, userId: uid }, {
                         $inc: { 'messages.overall': u.overall, 'messages.today': u.today, 'messages.week': u.week },
                         $set: { username: u.name, chatTitle: msg.chat.title || 'Group' }
-                    },
-                    { upsert: true }
-                );
-                await GlobalUserStats.updateOne(
-                    { userId: uid },
-                    {
+                    }, { upsert: true });
+                    await GlobalUserStats.updateOne({ userId: uid }, {
                         $inc: { 'messages.overall': u.overall, 'messages.today': u.today, 'messages.week': u.week },
                         $set: { username: u.name }
-                    },
-                    { upsert: true }
-                );
-
-                if (i % 20 === 0) {
-                    await new Promise(r => setTimeout(r, 500)); // Prevent DB overload
+                    }, { upsert: true });
                 }
+
+                await GlobalGroupStats.updateOne({ chatId }, {
+                    $inc: { 'messages.overall': chunkTotal, 'messages.today': chunkToday, 'messages.week': chunkWeek }
+                }, { upsert: true });
+
+                processedCount += chunk.length;
+                offsetId = chunk[chunk.length - 1].id;
+
+                await bot.editMessageText(`⏳ **Syncing (Memory-Safe)...**\nProcessed: \`${processedCount}\` / \`${limit}\``, {
+                    chat_id: msg.chat.id, message_id: statusMsg.message_id, parse_mode: 'Markdown'
+                }).catch(() => { });
+
+                // Small delay to prevent API flooding
+                await new Promise(r => setTimeout(r, 1500));
             }
 
-            await GlobalGroupStats.updateOne(
-                { chatId },
-                {
-                    $inc: { 'messages.overall': totalGroupMessages, 'messages.today': totalGroupToday, 'messages.week': totalGroupWeek },
-                    $set: { title: msg.chat.title || 'Unknown Group' }
-                },
-                { upsert: true }
-            );
+            if (processedCount === 0) {
+                await client.disconnect();
+                return bot.editMessageText("ℹ️ No historical messages found.", { chat_id: msg.chat.id, message_id: statusMsg.message_id });
+            }
 
-            await bot.editMessageText(`✅ **Sync Complete!**\nProcessed \`${allMessages.length}\` messages.\nUpdated stats for \`${userIds.length}\` users.`, {
-                chat_id: msg.chat.id,
-                message_id: statusMsg.message_id,
-                parse_mode: 'Markdown'
+            await bot.editMessageText(`✅ **Sync Complete!**\nTotal: \`${processedCount}\` messages.\nYour database is now up to date.`, {
+                chat_id: msg.chat.id, message_id: statusMsg.message_id, parse_mode: 'Markdown'
             });
 
             await client.disconnect();

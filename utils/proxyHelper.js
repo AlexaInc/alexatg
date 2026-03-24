@@ -17,7 +17,7 @@ class ProxyHelper {
         this.rejectUnauthorized = process.env.PROXY_REJECT_UNAUTHORIZED === 'true';
         // Use default timeout (60s) or user specified
         this.timeout = parseInt(process.env.PROXY_TIMEOUT || '60000', 10);
-        this.disableGlobal = process.env.PROXY_DISABLE_GLOBAL === 'false';
+        this.disableGlobal = process.env.PROXY_DISABLE_GLOBAL === 'true';
 
         // Default bypasses + user provided + Aiven
         const defaultBypass = ['localhost', '127.0.0.1', '::1', '0.0.0.0', '.aivencloud.com'];
@@ -189,7 +189,10 @@ class ProxyHelper {
                 }
 
                 if (!this.shouldBypass(urlObj.href)) {
+                    console.log(`🚀 Proxying request to: ${urlObj.href}`);
                     requestOptions.agent = agent;
+                } else {
+                    console.log(`⏩ Bypassing proxy for: ${urlObj.href}`);
                 }
 
                 return originalConfig.call(null, requestOptions, ...args);

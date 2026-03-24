@@ -1,4 +1,6 @@
 const TelegramBot = require("node-telegram-bot-api");
+require('./web');
+
 const mongoose = require("mongoose");
 require('dotenv').config();
 const proxyHelper = require('./utils/proxyHelper');

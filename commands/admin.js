@@ -3,7 +3,8 @@ module.exports = function (bot, deps) {
   const { getTarget, handleAnonymous, escapeHTML } = handlers;
 
   // --- MUTE COMMAND ---
-  bot.onText(/^\/mu/, async (msg) => {
+  bot.onText(/^\/mu(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/mu', deps.BOT_USERNAME)) return;
     const text = msg.text || '';
     const command = text.split(' ')[0].toLowerCase();
     const args = text.split(' ').slice(1);
@@ -56,7 +57,8 @@ module.exports = function (bot, deps) {
   });
 
   // --- UNMUTE COMMAND ---
-  bot.onText(/^\/unmu/, async (msg) => {
+  bot.onText(/^\/unmu(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/unmu', deps.BOT_USERNAME)) return;
     const args = (msg.text || '').split(' ').slice(1);
     const chatId = msg.chat.id;
     if (!msg.reply_to_message && !args.length) return bot.sendMessage(chatId, "⚠️ Reply or ID required.");
@@ -80,7 +82,8 @@ module.exports = function (bot, deps) {
   });
 
   // --- BAN COMMAND ---
-  bot.onText(/^\/ba/, async (msg) => {
+  bot.onText(/^\/ba(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/ba', deps.BOT_USERNAME)) return;
     const args = (msg.text || '').split(' ').slice(1);
     const chatId = msg.chat.id;
     if (!msg.reply_to_message && !args.length) return bot.sendMessage(chatId, "⚠️ Reply or ID required.");
@@ -108,7 +111,8 @@ module.exports = function (bot, deps) {
   });
 
   // --- UNBAN COMMAND ---
-  bot.onText(/^\/unba/, async (msg) => {
+  bot.onText(/^\/unba(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/unba', deps.BOT_USERNAME)) return;
     const args = (msg.text || '').split(' ').slice(1);
     const chatId = msg.chat.id;
     if (!msg.reply_to_message && !args.length) return bot.sendMessage(chatId, "⚠️ Reply or ID required.");
@@ -173,7 +177,8 @@ module.exports = function (bot, deps) {
     return { inline_keyboard: rows };
   }
 
-  bot.onText(/^\/prom/, async (msg) => {
+  bot.onText(/^\/prom(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/prom', deps.BOT_USERNAME)) return;
     // Ignore /promme
     if (msg.text && msg.text.toLowerCase().startsWith('/promme')) return;
 
@@ -213,7 +218,8 @@ module.exports = function (bot, deps) {
   });
 
   // --- DEMOTE COMMAND ---
-  bot.onText(/^\/dem/, async (msg) => {
+  bot.onText(/^\/dem(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/dem', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     if (!msg.reply_to_message) return bot.sendMessage(chatId, "Please reply to the user you want to demote.");
 
@@ -241,7 +247,8 @@ module.exports = function (bot, deps) {
     }
   });
   // --- FILTER COMMAND ---
-  bot.onText(/^\/filter/, async (msg) => {
+  bot.onText(/^\/filter(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/filter', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const caller = await bot.getChatMember(chatId, userId);
@@ -264,8 +271,12 @@ module.exports = function (bot, deps) {
     const newFilter = {
       triggers: triggers,
       type: result.type,
-      reply: result.type === "text" ? result.text : result.file_id
+      reply: result.type === "text" ? result.file_id : result.file_id, // file_id stores text for text type
+      caption: result.caption,
+      entities: result.entities
     };
+
+    // Fix: result.type === "text" uses result.file_id which is msg.text
 
     try {
       deps.Filters.addFilter(String(chatId), newFilter);
@@ -276,7 +287,8 @@ module.exports = function (bot, deps) {
   });
 
   // --- STOP (FILTER) COMMAND ---
-  bot.onText(/^\/stop/, async (msg) => {
+  bot.onText(/^\/stop(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/stop', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const caller = await bot.getChatMember(chatId, userId);
@@ -300,7 +312,8 @@ module.exports = function (bot, deps) {
   });
 
   // --- /quiz Trigger (Quiz) ---
-  bot.onText(/^\/quiz(?:\s+(.+))?/, async (msg, match) => {
+  bot.onText(/^\/quiz(?:\s|$|@)/, async (msg, match) => {
+    if (!deps.handlers.checkCommand(msg, '/quiz', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const quizId = match[1];
@@ -331,7 +344,8 @@ module.exports = function (bot, deps) {
   });
 
   // --- FILTERS COMMAND ---
-  bot.onText(/^\/filters/, async (msg) => {
+  bot.onText(/^\/filters(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/filters', deps.BOT_USERNAME)) return;
     const allFilters = deps.Filters.getFilters(String(msg.chat.id));
     if (!allFilters || allFilters.length === 0) return bot.sendMessage(msg.chat.id, "❌ No filters in this chat.");
 
@@ -351,7 +365,8 @@ module.exports = function (bot, deps) {
   ];
 
   // --- NSFW COMMANDS ---
-  bot.onText(/^\/nsfw$/, async (msg) => {
+  bot.onText(/^\/nsfw(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/nsfw', deps.BOT_USERNAME)) return;
     const nsfwMenu = `🔞 *NSFW Commands:*\n${nsfwCommands.join("\n")}`;
     bot.sendMessage(msg.chat.id, nsfwMenu, { parse_mode: 'Markdown' });
   });
@@ -416,7 +431,8 @@ module.exports = function (bot, deps) {
   });
 
   // --- ACCEPT MODE COMMANDS ---
-  bot.onText(/^\/accepton/, async (msg) => {
+  bot.onText(/^\/accepton(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/accepton', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const caller = await bot.getChatMember(chatId, userId);
@@ -437,7 +453,8 @@ module.exports = function (bot, deps) {
     bot.sendMessage(chatId, `✅ Accept mode ENABLED.\nRequired invites: *${count}*`, { parse_mode: "Markdown" });
   });
 
-  bot.onText(/^\/acceptoff/, async (msg) => {
+  bot.onText(/^\/acceptoff(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/acceptoff', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const caller = await bot.getChatMember(chatId, userId);
@@ -454,7 +471,8 @@ module.exports = function (bot, deps) {
     bot.sendMessage(chatId, `🛑 Accept mode DISABLED`, { parse_mode: "Markdown" });
   });
 
-  bot.onText(/^\/ano/, async (msg) => {
+  bot.onText(/^\/ano(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/ano', deps.BOT_USERNAME)) return;
     if (msg.from.username === 'GroupAnonymousBot' || msg.sender_chat?.type === 'channel') {
       await bot.sendMessage(msg.chat.id, "🛡️ **Identity Unmasking**\nClick the button below to remove your anonymous status. This will reveal your real account in this group but keep all your current admin permissions.", {
         parse_mode: 'Markdown',
@@ -472,7 +490,8 @@ module.exports = function (bot, deps) {
   // --- PURGE COMMANDS ---
   const purgeSessions = {};
 
-  bot.onText(/^\/purgefrom/, async (msg) => {
+  bot.onText(/^\/purgefrom(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/purgefrom', deps.BOT_USERNAME)) return;
     try {
       const permError = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID);
       if (permError && typeof permError === 'string') return bot.sendMessage(msg.chat.id, permError);
@@ -491,7 +510,8 @@ module.exports = function (bot, deps) {
     }
   });
 
-  bot.onText(/^\/purgeto/, async (msg) => {
+  bot.onText(/^\/purgeto(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/purgeto', deps.BOT_USERNAME)) return;
     try {
       const permError = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID);
       if (permError && typeof permError === 'string') return bot.sendMessage(msg.chat.id, permError);
@@ -533,7 +553,8 @@ module.exports = function (bot, deps) {
     }
   });
 
-  bot.onText(/^\/purge$/, async (msg) => {
+  bot.onText(/^\/purge(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/purge', deps.BOT_USERNAME)) return;
     try {
       const permError = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID);
       if (permError && typeof permError === 'string') return bot.sendMessage(msg.chat.id, permError);
@@ -653,7 +674,8 @@ module.exports = function (bot, deps) {
   });
 
   // --- SWEEP COMMAND ---
-  bot.onText(/^\/sweep/, async (msg) => {
+  bot.onText(/^\/sweep(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/sweep', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const senderId = msg.from.id;
 
@@ -916,7 +938,8 @@ module.exports = function (bot, deps) {
   }
 
   // --- ANTILINK COMMAND ---
-  bot.onText(/^\/antilink/, async (msg) => {
+  bot.onText(/^\/antilink(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/antilink', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
 
@@ -1073,7 +1096,8 @@ module.exports = function (bot, deps) {
   }
 
   // --- WARN COMMAND ---
-  bot.onText(/^\/warn/, async (msg) => {
+  bot.onText(/^\/warn(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/warn', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const args = (msg.text || '').split(' ').slice(1);

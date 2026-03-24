@@ -5,7 +5,8 @@ module.exports = function (bot, deps) {
   const { Specialuser, updateUserCount_Optimized, checkUserCount } = deps;
   const { START_IMAGE_FILE_ID, getStartMessage, startKeyboard, helpMainKeyboard } = require('../utils/ui');
 
-  bot.onText(/^\/start/, (msg) => {
+  bot.onText(/^\/start(?:\s|$|@)/, (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/start', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const senderName = msg.from.first_name || 'User';
     const caption = getStartMessage(senderName);
@@ -22,7 +23,8 @@ module.exports = function (bot, deps) {
     });
   });
 
-  bot.onText(/^\/help/, (msg) => {
+  bot.onText(/^\/help(?:\s|$|@)/, (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/help', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, 'Please select a command category:', {
       reply_markup: helpMainKeyboard,
@@ -30,7 +32,8 @@ module.exports = function (bot, deps) {
     });
   });
 
-  bot.onText(/^\/ai/, async (msg) => {
+  bot.onText(/^\/ai(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/ai', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const isSpecialUser = Specialuser.includes(userId);
@@ -63,7 +66,8 @@ module.exports = function (bot, deps) {
     }
   });
 
-  bot.onText(/^\/aic/, async (msg) => {
+  bot.onText(/^\/aic(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/aic', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const isSpecialUser = Specialuser.includes(userId);
@@ -82,7 +86,10 @@ module.exports = function (bot, deps) {
     }
   });
 
-  bot.onText(/^\/(send|go)(\s+|$)/, async (msg) => {
+  bot.onText(/^\/(send|go)(?:\s|$|@)/, async (msg) => {
+    const cmd = msg.text.split(' ')[0].toLowerCase().split('@')[0];
+    if (cmd !== '/send' && cmd !== '/go') return;
+    if (msg.text.includes('@') && !msg.text.includes(`@${deps.BOT_USERNAME}`)) return;
     const chatId = msg.chat.id;
     try {
       const from = msg.from;
@@ -133,7 +140,8 @@ module.exports = function (bot, deps) {
     }
   });
 
-  bot.onText(/^\/id/, (msg) => {
+  bot.onText(/^\/id(?:\s|$|@)/, (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/id', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     let text = `ID information:\nChat ID: \`${chatId}\`\nUser ID: \`${userId}\``;

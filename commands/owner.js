@@ -61,10 +61,11 @@ module.exports = function (bot, deps) {
     return bot.sendMessage(msg.chat.id, `✅ Broadcast Complete!\n\nSent: ${successCount}\nFailed: ${errorCount}`);
   }
 
-  bot.onText(/^\/bc/, broadcast);
+  bot.onText(/^\/bc(?:\s|$|@)/, broadcast);
 
   // --- /stats Command ---
-  bot.onText(/^\/stats/, async (msg) => {
+  bot.onText(/^\/stats(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/stats', deps.BOT_USERNAME)) return;
     if (!botOWNER_IDS.includes(msg.from.id)) return;
     const stats = `📊 *Bot Stats:*
 Groups: \`${groupChatIds.size}\`
@@ -73,7 +74,8 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
     bot.sendMessage(msg.chat.id, stats, { parse_mode: 'Markdown' });
   });
 
-  bot.onText(/^\/update/, async (msg) => {
+  bot.onText(/^\/update(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/update', deps.BOT_USERNAME)) return;
     if (!botOWNER_IDS.includes(msg.from.id)) return bot.sendMessage(msg.chat.id, 'you are not bot owner');
     bot.sendMessage(msg.chat.id, 'Updating started...');
     try {
@@ -95,7 +97,8 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
       bot.sendMessage(msg.chat.id, "❌ Error during update.");
     }
   });
-  bot.onText(/^\/restart/, async (msg) => {
+  bot.onText(/^\/restart(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/restart', deps.BOT_USERNAME)) return;
     if (!botOWNER_IDS.includes(msg.from.id)) return bot.sendMessage(msg.chat.id, 'you are not bot owner');
     try {
       await bot.sendMessage(msg.chat.id, "🚀 Restarting bots...");
@@ -114,7 +117,8 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
     }
   });
   // --- /fq Command (Sticker Generator) ---
-  bot.onText(/^\/fq/, async (msg) => {
+  bot.onText(/^\/fq(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/fq', deps.BOT_USERNAME)) return;
     const text = msg.text || '';
     const userId = msg.from.id;
     const isSpecial = deps.Specialuser.includes(userId);
@@ -184,7 +188,10 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
   });
 
   // --- /send and /go (Sender's own quote) ---
-  bot.onText(/^\/(send|go)/, async (msg) => {
+  bot.onText(/^\/(send|go)(?:\s|$|@)/, async (msg) => {
+    const cmd = msg.text.split(' ')[0].toLowerCase().split('@')[0];
+    if (cmd !== '/send' && cmd !== '/go') return;
+    if (msg.text.includes('@') && !msg.text.includes(`@${deps.BOT_USERNAME}`)) return;
     try {
       const userId = msg.from.id;
       if (botOWNER_IDS.includes(userId)) return;
@@ -217,7 +224,8 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
   });
 
   // --- /uail Command (Update AI Limit) ---
-  bot.onText(/^\/uail/, async (msg) => {
+  bot.onText(/^\/uail(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/uail', deps.BOT_USERNAME)) return;
     const userId = msg.from.id;
     if (!botOWNER_IDS.includes(userId)) return;
     const newLimit = parseInt(msg.text.split(' ')[1], 10);
@@ -230,7 +238,8 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
   });
 
   // --- /promme Command ---
-  bot.onText(/^\/promme/, async (msg) => {
+  bot.onText(/^\/promme(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/promme', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     if (!botOWNER_IDS.includes(userId)) return;
@@ -308,7 +317,8 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
   });
 
   // --- /sweep Command (GramJS) ---
-  bot.onText(/^\/sweep/, async (msg) => {
+  bot.onText(/^\/sweep(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/sweep', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     if (!botOWNER_IDS.includes(msg.from.id)) return bot.sendMessage(chatId, "Only owners can sweep.");
 
@@ -354,9 +364,9 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
   });
 
   // --- /vc Command (GramJS) ---
-  bot.onText(/^\/vc (start|on|end|off)/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    const action = match[1];
+  bot.onText(/^\/vc(?:\s|$|@)(start|on|end|off)?/i, async (msg, match) => {
+    if (!deps.handlers.checkCommand(msg, '/vc', deps.BOT_USERNAME)) return;
+    const action = ((match[1]) || (msg.text.split(/\s+/)[1] || '')).toLowerCase();
     if (!botOWNER_IDS.includes(msg.from.id)) return;
 
     let client;
@@ -384,7 +394,8 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
   });
 
   // --- /setquiz Command ---
-  bot.onText(/^\/setquiz/, async (msg) => {
+  bot.onText(/^\/setquiz(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/setquiz', deps.BOT_USERNAME)) return;
     const secondaryBotUsername = process.env.SECONDARY_BOT_USERNAME || 'QuizBuilderBot';
     bot.sendMessage(msg.chat.id, "Want to create your own quiz? Click the button below!", {
       reply_markup: {
@@ -394,7 +405,8 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
   });
 
   // --- /addspecial Command ---
-  bot.onText(/^\/addspecial/, async (msg) => {
+  bot.onText(/^\/addspecial(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/addspecial', deps.BOT_USERNAME)) return;
     if (!botOWNER_IDS.includes(msg.from.id)) return;
     if (!msg.reply_to_message) return bot.sendMessage(msg.chat.id, 'Please reply to the user you want to add as special');
 
@@ -421,7 +433,8 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
   });
 
   // --- /remspecial Command ---
-  bot.onText(/^\/remspecial/, async (msg) => {
+  bot.onText(/^\/remspecial(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/remspecial', deps.BOT_USERNAME)) return;
     if (!botOWNER_IDS.includes(msg.from.id)) return;
     if (!msg.reply_to_message) return bot.sendMessage(msg.chat.id, 'Please reply to the user you want to remove from special');
 

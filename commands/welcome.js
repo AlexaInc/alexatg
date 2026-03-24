@@ -35,7 +35,8 @@ module.exports = function (bot, deps) {
     };
 
     // --- Welcome Command ---
-    bot.onText(/^\/welcome(?:\s+(on|off))?$/i, async (msg, match) => {
+    bot.onText(/^\/welcome(?:\s|$|@)/i, async (msg, match) => {
+        if (!deps.handlers.checkCommand(msg, '/welcome', deps.BOT_USERNAME)) return;
         const chatId = msg.chat.id;
         if (msg.chat.type === 'private') return;
 
@@ -44,7 +45,8 @@ module.exports = function (bot, deps) {
             settings = await WelcomeSettings.create({ groupId: String(chatId) });
         }
 
-        const arg = match[1] ? match[1].toLowerCase() : null;
+        const args = (msg.text || '').split(/\s+/);
+        const arg = args[1] ? args[1].toLowerCase() : null;
 
         if (arg) {
             if (!(await checkAdmin(chatId, msg.from.id))) {
@@ -59,7 +61,8 @@ module.exports = function (bot, deps) {
     });
 
     // --- Goodbye Command ---
-    bot.onText(/^\/goodbye(?:\s+(on|off))?$/i, async (msg, match) => {
+    bot.onText(/^\/goodbye(?:\s|$|@)/i, async (msg, match) => {
+        if (!deps.handlers.checkCommand(msg, '/goodbye', deps.BOT_USERNAME)) return;
         const chatId = msg.chat.id;
         if (msg.chat.type === 'private') return;
 
@@ -68,7 +71,8 @@ module.exports = function (bot, deps) {
             settings = await WelcomeSettings.create({ groupId: String(chatId) });
         }
 
-        const arg = match[1] ? match[1].toLowerCase() : null;
+        const args = (msg.text || '').split(/\s+/);
+        const arg = args[1] ? args[1].toLowerCase() : null;
 
         if (arg) {
             if (!(await checkAdmin(chatId, msg.from.id))) {
@@ -83,7 +87,8 @@ module.exports = function (bot, deps) {
     });
 
     // --- Set Welcome ---
-    bot.onText(/^\/setwelcome$/i, async (msg) => {
+    bot.onText(/^\/setwelcome(?:\s|$|@)/i, async (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/setwelcome', deps.BOT_USERNAME)) return;
         const chatId = msg.chat.id;
         if (msg.chat.type === 'private') return;
 
@@ -130,7 +135,8 @@ module.exports = function (bot, deps) {
     });
 
     // --- Set Goodbye ---
-    bot.onText(/^\/setgoodbye$/i, async (msg) => {
+    bot.onText(/^\/setgoodbye(?:\s|$|@)/i, async (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/setgoodbye', deps.BOT_USERNAME)) return;
         const chatId = msg.chat.id;
         if (msg.chat.type === 'private') return;
 
@@ -177,7 +183,8 @@ module.exports = function (bot, deps) {
     });
 
     // --- Reset Welcome ---
-    bot.onText(/^\/resetwelcome$/i, async (msg) => {
+    bot.onText(/^\/resetwelcome(?:\s|$|@)/i, async (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/resetwelcome', deps.BOT_USERNAME)) return;
         const chatId = msg.chat.id;
         if (msg.chat.type === 'private') return;
 
@@ -199,7 +206,8 @@ module.exports = function (bot, deps) {
     });
 
     // --- Reset Goodbye ---
-    bot.onText(/^\/resetgoodbye$/i, async (msg) => {
+    bot.onText(/^\/resetgoodbye(?:\s|$|@)/i, async (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/resetgoodbye', deps.BOT_USERNAME)) return;
         const chatId = msg.chat.id;
         if (msg.chat.type === 'private') return;
 
@@ -221,7 +229,8 @@ module.exports = function (bot, deps) {
     });
 
     // --- Clean Welcome ---
-    bot.onText(/^\/cleanwelcome$/i, async (msg) => {
+    bot.onText(/^\/cleanwelcome(?:\s|$|@)/i, async (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/cleanwelcome', deps.BOT_USERNAME)) return;
         const chatId = msg.chat.id;
         if (msg.chat.type === 'private') return;
 

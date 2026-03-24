@@ -291,10 +291,11 @@ module.exports = function (bot, deps) {
             }
 
             // ====== Filter Check ======
-            const content = msg.text?.trim() || msg.sticker?.emoji || "";
+            const content = (msg.text || msg.caption || "").trim() || msg.sticker?.emoji || "";
             const matchedFilter = Filters.checkFilters(String(chatId), content);
 
             if (matchedFilter) {
+                const replyTo = { reply_to_message_id: msg.message_id };
                 switch (matchedFilter.type) {
                     case 'text': {
                         let reptxt = matchedFilter.reply;
@@ -309,32 +310,60 @@ module.exports = function (bot, deps) {
                             .replace(/\{day\}/gi, require('moment-timezone').tz('Asia/Colombo').format('dddd'))
                             .replace(/\{greating\}/gi, getGreeting());
 
-                        bot.sendMessage(chatId, reptxt, { reply_to_message_id: msg.message_id });
+                        bot.sendMessage(chatId, reptxt, {
+                            ...replyTo,
+                            entities: matchedFilter.entities,
+                            parse_mode: matchedFilter.entities ? undefined : 'HTML'
+                        });
                         break;
                     }
                     case 'sticker':
-                        bot.sendSticker(chatId, matchedFilter.reply, { reply_to_message_id: msg.message_id });
+                        bot.sendSticker(chatId, matchedFilter.reply, replyTo);
                         break;
                     case 'image':
-                        bot.sendPhoto(chatId, matchedFilter.reply, { reply_to_message_id: msg.message_id });
+                        bot.sendPhoto(chatId, matchedFilter.reply, {
+                            ...replyTo,
+                            caption: matchedFilter.caption,
+                            caption_entities: matchedFilter.entities
+                        });
                         break;
                     case 'video':
-                        bot.sendVideo(chatId, matchedFilter.reply, { reply_to_message_id: msg.message_id });
+                        bot.sendVideo(chatId, matchedFilter.reply, {
+                            ...replyTo,
+                            caption: matchedFilter.caption,
+                            caption_entities: matchedFilter.entities
+                        });
                         break;
                     case 'gif':
-                        bot.sendAnimation(chatId, matchedFilter.reply, { reply_to_message_id: msg.message_id });
+                        bot.sendAnimation(chatId, matchedFilter.reply, {
+                            ...replyTo,
+                            caption: matchedFilter.caption,
+                            caption_entities: matchedFilter.entities
+                        });
                         break;
                     case 'audio':
-                        bot.sendAudio(chatId, matchedFilter.reply, { reply_to_message_id: msg.message_id });
+                        bot.sendAudio(chatId, matchedFilter.reply, {
+                            ...replyTo,
+                            caption: matchedFilter.caption,
+                            caption_entities: matchedFilter.entities
+                        });
                         break;
                     case 'voice':
-                        bot.sendVoice(chatId, matchedFilter.reply, { reply_to_message_id: msg.message_id });
+                        bot.sendVoice(chatId, matchedFilter.reply, {
+                            ...replyTo,
+                            caption: matchedFilter.caption,
+                            caption_entities: matchedFilter.entities
+                        });
                         break;
                     case 'document':
-                        bot.sendDocument(chatId, matchedFilter.reply, { reply_to_message_id: msg.message_id });
+                        bot.sendDocument(chatId, matchedFilter.reply, {
+                            ...replyTo,
+                            caption: matchedFilter.caption,
+                            caption_entities: matchedFilter.entities
+                        });
                         break;
                     case 'video_note':
-                        bot.sendVideoNote(chatId, matchedFilter.reply, { reply_to_message_id: msg.message_id });
+                        bot.sendVideoNote(chatId, matchedFilter.reply, replyTo);
                         break;
                 }
             }

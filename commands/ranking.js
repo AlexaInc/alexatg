@@ -277,14 +277,40 @@ module.exports = function (bot, deps) {
     };
 
     // Slash commands
-    bot.onText(/\/ranking/, (msg) => handleRanking(msg));
-    bot.onText(/\/topusers/, (msg) => handleTopUsers(msg));
-    bot.onText(/\/topgroups/, (msg) => handleTopGroups(msg));
-    bot.onText(/\/(profile|rofile)/, (msg) => handleProfile(msg));
-    bot.onText(/\/mytop/, (msg) => handleMyTop(msg));
-    bot.onText(/\/groupstats/, (msg) => handleGroupStats(msg));
-    bot.onText(/\/fetchhistory/, (msg) => handleFetchHistory(msg));
-    bot.onText(/\/clearstats/, (msg) => handleClearStats(msg));
+    bot.onText(/^\/ranking(?:\s|$|@)/, (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/ranking', deps.BOT_USERNAME)) return;
+        handleRanking(msg);
+    });
+    bot.onText(/^\/topusers(?:\s|$|@)/, (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/topusers', deps.BOT_USERNAME)) return;
+        handleTopUsers(msg);
+    });
+    bot.onText(/^\/topgroups(?:\s|$|@)/, (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/topgroups', deps.BOT_USERNAME)) return;
+        handleTopGroups(msg);
+    });
+    bot.onText(/^\/(profile|rofile)(?:\s|$|@)/, (msg) => {
+        const cmd = msg.text.split(' ')[0].toLowerCase().split('@')[0];
+        if (cmd !== '/profile' && cmd !== '/rofile') return;
+        if (msg.text.includes('@') && !msg.text.includes(`@${deps.BOT_USERNAME}`)) return;
+        handleProfile(msg);
+    });
+    bot.onText(/^\/mytop(?:\s|$|@)/, (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/mytop', deps.BOT_USERNAME)) return;
+        handleMyTop(msg);
+    });
+    bot.onText(/^\/groupstats(?:\s|$|@)/, (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/groupstats', deps.BOT_USERNAME)) return;
+        handleGroupStats(msg);
+    });
+    bot.onText(/^\/fetchhistory(?:\s|$|@)/, (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/fetchhistory', deps.BOT_USERNAME)) return;
+        handleFetchHistory(msg);
+    });
+    bot.onText(/^\/clearstats(?:\s|$|@)/, (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/clearstats', deps.BOT_USERNAME)) return;
+        handleClearStats(msg);
+    });
 
     // Export for manual callback routing if needed
     deps.ranking = { handleCallback };

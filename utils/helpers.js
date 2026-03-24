@@ -7,34 +7,56 @@ const adminCache = {};
 function getMessageType(msg) {
   if (!msg) return null;
 
-  if (msg.photo)
-    return { type: "image", file_id: msg.photo[msg.photo.length - 1].file_id };
+  const result = {
+    type: null,
+    file_id: null,
+    caption: msg.caption || null,
+    entities: msg.caption_entities || msg.entities || null
+  };
 
-  if (msg.video)
-    return { type: "video", file_id: msg.video.file_id };
+  if (msg.photo) {
+    result.type = "image";
+    result.file_id = msg.photo[msg.photo.length - 1].file_id;
+  } else if (msg.video) {
+    result.type = "video";
+    result.file_id = msg.video.file_id;
+  } else if (msg.document) {
+    result.type = "document";
+    result.file_id = msg.document.file_id;
+  } else if (msg.sticker) {
+    result.type = "sticker";
+    result.file_id = msg.sticker.file_id;
+  } else if (msg.animation) {
+    result.type = "gif";
+    result.file_id = msg.animation.file_id;
+  } else if (msg.audio) {
+    result.type = "audio";
+    result.file_id = msg.audio.file_id;
+  } else if (msg.voice) {
+    result.type = "voice";
+    result.file_id = msg.voice.file_id;
+  } else if (msg.video_note) {
+    result.type = "video_note";
+    result.file_id = msg.video_note.file_id;
+  } else if (msg.text) {
+    result.type = "text";
+    result.file_id = msg.text;
+  } else {
+    return null;
+  }
 
-  if (msg.document)
-    return { type: "document", file_id: msg.document.file_id };
+  return result;
+}
 
-  if (msg.sticker)
-    return { type: "sticker", file_id: msg.sticker.file_id };
+function checkCommand(msg, cmd, botUsername) {
+  if (!msg.text) return false;
+  const parts = msg.text.split(/\s+/)[0].toLowerCase().split('@');
+  const mainCmd = parts[0];
+  const username = parts[1];
 
-  if (msg.animation)
-    return { type: "gif", file_id: msg.animation.file_id };
-
-  if (msg.audio)
-    return { type: "audio", file_id: msg.audio.file_id };
-
-  if (msg.voice)
-    return { type: "voice", file_id: msg.voice.file_id };
-
-  if (msg.video_note)
-    return { type: "video_note", file_id: msg.video_note.file_id };
-
-  if (msg.text)
-    return { type: "text", file_id: msg.text };
-
-  return null;
+  if (mainCmd !== cmd.toLowerCase()) return false;
+  if (username && botUsername && username.toLowerCase() !== botUsername.toLowerCase()) return false;
+  return true;
 }
 
 function parseFilterTriggers(commandText) {
@@ -374,6 +396,7 @@ module.exports = {
   resolveUsername,
   getTarget,
   handleAnonymous,
+  checkCommand,
   getGreeting,
   chunkArray,
   sleep,

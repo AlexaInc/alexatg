@@ -151,23 +151,45 @@ module.exports = function (bot, deps) {
 
     const handleFetchHistory = async (msg) => {
         if (!deps.botOWNER_IDS.includes(msg.from.id)) {
-            return bot.sendMessage(msg.chat.id, "❌ Restricted to owners.");
+            return bot.sendMessage(msg.chat.id, "❌ Restricted to bot owners.");
         }
 
         const args = (msg.text || '').split(' ');
         const limit = parseInt(args[1]) || 500;
         const chatId = msg.chat.id.toString();
 
-        const statusMsg = await bot.sendMessage(msg.chat.id, `⏳ **Fetching ${limit} messages using Userbot...**`, { parse_mode: 'Markdown' });
+        const statusMsg = await bot.sendMessage(msg.chat.id, `⏳ **History sync started...**\nLimit: \`${limit}\` messages.`, { parse_mode: 'Markdown' });
 
         try {
             const client = await deps.handlers.getUserbotClient();
             if (!client) return bot.editMessageText("❌ Userbot not configured.", { chat_id: msg.chat.id, message_id: statusMsg.message_id });
 
             const entity = await deps.handlers.getJoinedEntity(client, bot, chatId);
-            const messages = await client.getMessages(entity, { limit });
 
-            if (!messages || messages.length === 0) {
+            let allMessages = [];
+            let offsetId = 0;
+            const chunkSize = 100;
+
+            while (allMessages.length < limit) {
+                const chunkLimit = Math.min(chunkSize, limit - allMessages.length);
+                const chunk = await client.getMessages(entity, { limit: chunkLimit, offsetId });
+                if (!chunk || chunk.length === 0) break;
+
+                allMessages.push(...chunk);
+                offsetId = chunk[chunk.length - 1].id;
+
+                await bot.editMessageText(`⏳ **Syncing history...**\nDownloaded: \`${allMessages.length}\` / \`${limit}\` messages.`, {
+                    chat_id: msg.chat.id,
+                    message_id: statusMsg.message_id,
+                    parse_mode: 'Markdown'
+                }).catch(() => { });
+
+                if (allMessages.length < limit) {
+                    await new Promise(r => setTimeout(r, 2000)); // Rate limit protection
+                }
+            }
+
+            if (allMessages.length === 0) {
                 await client.disconnect();
                 return bot.editMessageText("ℹ️ No historical messages found.", { chat_id: msg.chat.id, message_id: statusMsg.message_id });
             }
@@ -182,12 +204,36 @@ module.exports = function (bot, deps) {
             let totalGroupToday = 0;
             let totalGroupWeek = 0;
 
-            for (const m of messages) {
+            // Fetch participants to resolve names if possible (more reliable than m.sender)
+            const chatUsers = await client.getParticipants(entity).catch(() => []);
+            const userCache = {};
+            chatUsers.forEach(u => {
+                userCache[u.id.toString()] = {
+                    name: (u.firstName + (u.lastName ? " " + u.lastName : "")).trim(),
+                    bot: u.bot
+                };
+            });
+
+            for (const m of allMessages) {
                 if (!m.fromId || !m.fromId.userId) continue;
                 const uid = m.fromId.userId.toString();
+
+                // Bot detection
+                const cachedUser = userCache[uid];
+                if (cachedUser && cachedUser.bot) continue;
+                if (m.sender && m.sender.bot) continue;
+
                 const date = new Date(m.date * 1000);
 
-                if (!userCounts[uid]) userCounts[uid] = { overall: 0, today: 0, week: 0, name: "User" };
+                if (!userCounts[uid]) {
+                    let fullName = "User";
+                    if (cachedUser) {
+                        fullName = cachedUser.name;
+                    } else if (m.sender) {
+                        fullName = (m.sender.firstName + (m.sender.lastName ? " " + m.sender.lastName : "")).trim();
+                    }
+                    userCounts[uid] = { overall: 0, today: 0, week: 0, name: fullName };
+                }
                 userCounts[uid].overall++;
                 totalGroupMessages++;
 
@@ -201,20 +247,31 @@ module.exports = function (bot, deps) {
                 }
             }
 
-            // Perform updates
+            // Perform updates in moderate batches
             const userIds = Object.keys(userCounts);
-            for (const uid of userIds) {
+            for (let i = 0; i < userIds.length; i++) {
+                const uid = userIds[i];
                 const u = userCounts[uid];
                 await Activity.updateOne(
                     { chatId, userId: uid },
-                    { $inc: { 'messages.overall': u.overall, 'messages.today': u.today, 'messages.week': u.week } },
+                    {
+                        $inc: { 'messages.overall': u.overall, 'messages.today': u.today, 'messages.week': u.week },
+                        $set: { username: u.name, chatTitle: msg.chat.title || 'Group' }
+                    },
                     { upsert: true }
                 );
                 await GlobalUserStats.updateOne(
                     { userId: uid },
-                    { $inc: { 'messages.overall': u.overall, 'messages.today': u.today, 'messages.week': u.week } },
+                    {
+                        $inc: { 'messages.overall': u.overall, 'messages.today': u.today, 'messages.week': u.week },
+                        $set: { username: u.name }
+                    },
                     { upsert: true }
                 );
+
+                if (i % 20 === 0) {
+                    await new Promise(r => setTimeout(r, 500)); // Prevent DB overload
+                }
             }
 
             await GlobalGroupStats.updateOne(

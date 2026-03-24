@@ -33,7 +33,7 @@ function getLeagueInfo(messages) {
 }
 
 async function handleActivity(bot, deps, msg) {
-    if (!msg.from || msg.from.is_bot) return;
+    if (!msg.from || msg.from.is_bot || msg.chat.type === 'private') return;
 
     const userId = msg.from.id.toString();
     const chatId = msg.chat.id.toString();
@@ -92,8 +92,8 @@ async function handleActivity(bot, deps, msg) {
             'messages.week': 1
         },
         $set: {
-            username: msg.from.username || msg.from.first_name,
-            chatTitle: msg.chat.title || 'Private Chat',
+            username: (msg.from.first_name + (msg.from.last_name ? " " + msg.from.last_name : "")).trim(),
+            chatTitle: msg.chat.title || 'Group',
             lastMessageAt: now
         }
     };
@@ -119,7 +119,7 @@ async function handleActivity(bot, deps, msg) {
             'messages.week': 1
         },
         $set: {
-            username: msg.from.username || msg.from.first_name,
+            username: (msg.from.first_name + (msg.from.last_name ? " " + msg.from.last_name : "")).trim(),
             lastActiveAt: now
         }
     };

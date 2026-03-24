@@ -1400,8 +1400,15 @@ module.exports = function (bot, deps) {
       try {
         targetEntity = await client.getEntity(targetUserId);
       } catch (e) {
-        // Fallback: If not found, targetUserId as raw ID might still work or we try searching in chat
-        console.log(`Entity resolution for ${targetUserId} failed, using raw ID.`);
+        // Fallback: Scan participants in the current chat to find the user and cache their accessHash
+        try {
+          console.log(`Entity resolution for ${targetUserId} failed, scanning participants...`);
+          const participants = await client.getParticipants(entity);
+          const found = participants.find(p => String(p.id) === String(targetUserId));
+          if (found) targetEntity = found;
+        } catch (err) {
+          console.log(`Participant scan also failed: ${err.message}`);
+        }
       }
 
       bot.sendMessage(chatId, `🧹 Deleting all messages from ${isMe ? "you" : `[${targetName}](tg://user?id=${targetUserId})`}...`, { parse_mode: 'Markdown' });

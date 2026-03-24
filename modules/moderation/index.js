@@ -273,22 +273,26 @@ module.exports = function (bot, deps) {
             }
 
             const clicker = await bot.getChatMember(chatId, userId).catch(() => ({ status: 'member' }));
-            if (["administrator", "creator"].includes(clicker.status) || msg.from.is_bot) return;
+            const isAdmin = ["administrator", "creator"].includes(clicker.status) || botOWNER_IDS.includes(userId);
 
-            const banned = await BannedUser.findOne({ groupId: chatId, userId });
-            if (banned) {
-                bot.deleteMessage(chatId, msg.message_id).catch(() => { });
-                return;
-            }
-
-            const conf = await accceptMap.findOne({ groupId: chatId });
-            if (conf?.enabled) {
-                const inviteData = await Invite.findOne({ groupId: chatId, userId });
-                if (!inviteData || inviteData.count < conf.count) {
+            if (!isAdmin && !msg.from.is_bot) {
+                const banned = await BannedUser.findOne({ groupId: chatId, userId });
+                if (banned) {
                     bot.deleteMessage(chatId, msg.message_id).catch(() => { });
-                    return; // Stop here if user is limited by invite count
+                    return;
+                }
+
+                const conf = await accceptMap.findOne({ groupId: chatId });
+                if (conf?.enabled) {
+                    const inviteData = await Invite.findOne({ groupId: chatId, userId });
+                    if (!inviteData || inviteData.count < conf.count) {
+                        bot.deleteMessage(chatId, msg.message_id).catch(() => { });
+                        return; // Stop here if user is limited by invite count
+                    }
                 }
             }
+
+            if (msg.from.is_bot) return;
 
             // ====== Filter Check ======
             const content = (msg.text || msg.caption || "").trim() || msg.sticker?.emoji || "";

@@ -15,13 +15,55 @@ module.exports = function (bot, deps) {
     } = deps;
     const { getGreeting, escapeHTML } = handlers;
 
+    const processedEvents = new Set();
+    const isNewEvent = (chatId, userId, type) => {
+        const key = `${chatId}_${userId}_${type}`;
+        if (processedEvents.has(key)) return false;
+        processedEvents.add(key);
+        setTimeout(() => processedEvents.delete(key), 1000 * 30);
+        return true;
+    };
+
+    // ====== Large Group Trigger (chat_member) ======
+    bot.on("chat_member", async (update) => {
+        const oldStatus = update.old_chat_member?.status;
+        const newStatus = update.new_chat_member?.status;
+        if (!oldStatus || !newStatus) return;
+
+        // Joined
+        if (["left", "kicked"].includes(oldStatus) && ["member", "restricted"].includes(newStatus)) {
+            const msg = {
+                chat: update.chat,
+                from: update.from,
+                message_id: -1, // No real message to delete
+                new_chat_members: [update.new_chat_member.user]
+            };
+            bot.emit("new_chat_members", msg);
+        }
+
+        // Left
+        if (["member", "restricted", "administrator", "creator"].includes(oldStatus) && ["left", "kicked"].includes(newStatus)) {
+            const msg = {
+                chat: update.chat,
+                from: update.from,
+                message_id: -1,
+                left_chat_member: update.new_chat_member.user
+            };
+            bot.emit("left_chat_member", msg);
+        }
+    });
+
     // ====== New Member Handler ======
     bot.on("new_chat_members", async (msg) => {
         console.log(`[New Member] Triggered in chat ${msg.chat.id}`);
         try {
             const chatId = msg.chat.id;
             const adder = msg.from;
-            const newMembers = msg.new_chat_members;
+
+            // Deduplicate incoming members
+            const newMembers = (msg.new_chat_members || []).filter(m => isNewEvent(chatId, m.id, 'join'));
+            if (newMembers.length === 0) return; // All were duplicates
+
             let newAddedCount = 0;
 
             for (const member of newMembers) {
@@ -103,7 +145,16 @@ module.exports = function (bot, deps) {
     bot.on('left_chat_member', async (msg) => {
         try {
             const chatId = msg.chat.id;
-            bot.deleteMessage(chatId, msg.message_id).catch(() => { });
+            const member = msg.left_chat_member;
+
+            // Deduplicate left members
+            if (!isNewEvent(chatId, member.id, 'leave')) return;
+
+            // Delete service message if it originated from a native message event
+            if (msg.message_id !== -1) {
+                bot.deleteMessage(chatId, msg.message_id).catch(() => { });
+            }
+
             const me = await bot.getMe();
             if (msg.left_chat_member.id === me.id) {
                 if (groupChatIds && groupChatIds.has(chatId)) {

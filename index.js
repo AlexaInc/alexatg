@@ -50,7 +50,12 @@ const userRegistrationState = {};
 // --- BOT INSTANCE ---
 // Start with polling OFF — we do a safe startup below
 const bot = new TelegramBot(BOT_TOKEN, {
-  polling: false,
+  polling: {
+    autoStart: false,
+    params: {
+      allowed_updates: '["message", "edited_message", "callback_query", "my_chat_member", "chat_member", "inline_query", "poll", "poll_answer"]'
+    }
+  },
   request: {
     agentOptions: {
       keepAlive: true,

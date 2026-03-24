@@ -1400,14 +1400,16 @@ module.exports = function (bot, deps) {
       try {
         targetEntity = await client.getEntity(targetUserId);
       } catch (e) {
-        // Fallback: Scan participants in the current chat to find the user and cache their accessHash
+        // Fallback: Check recent messages in the current chat to find the user in the cache
         try {
-          console.log(`Entity resolution for ${targetUserId} failed, scanning participants...`);
-          const participants = await client.getParticipants(entity);
-          const found = participants.find(p => String(p.id) === String(targetUserId));
-          if (found) targetEntity = found;
+          console.log(`Direct resolution for ${targetUserId} failed, checking recent messages...`);
+          const recent = await client.getMessages(entity, { limit: 100 });
+          const found = recent.find(m => m.fromId && String(m.fromId.userId || m.fromId) === String(targetUserId));
+          if (found) {
+            targetEntity = await client.getEntity(found.fromId);
+          }
         } catch (err) {
-          console.log(`Participant scan also failed: ${err.message}`);
+          console.log(`Recent message scan also failed: ${err.message}`);
         }
       }
 

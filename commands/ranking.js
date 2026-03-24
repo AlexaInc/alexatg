@@ -155,7 +155,7 @@ module.exports = function (bot, deps) {
         }
 
         const args = (msg.text || '').split(' ');
-        const limit = parseInt(args[1]) || 500;
+        const limit = parseInt(args[1]) || 1000000; // Default to 1M (essentially all)
         const chatId = msg.chat.id.toString();
 
         const statusMsg = await bot.sendMessage(msg.chat.id, `⏳ **History sync started...**\nLimit: \`${limit}\` messages.`, { parse_mode: 'Markdown' });
@@ -283,7 +283,7 @@ module.exports = function (bot, deps) {
                 { upsert: true }
             );
 
-            await bot.editMessageText(`✅ **Sync Complete!**\nProcessed \`${messages.length}\` messages.\nUpdated stats for \`${userIds.length}\` users.`, {
+            await bot.editMessageText(`✅ **Sync Complete!**\nProcessed \`${allMessages.length}\` messages.\nUpdated stats for \`${userIds.length}\` users.`, {
                 chat_id: msg.chat.id,
                 message_id: statusMsg.message_id,
                 parse_mode: 'Markdown'

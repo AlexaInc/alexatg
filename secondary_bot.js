@@ -16,9 +16,21 @@ if (!token || !mongoUri) {
 }
 
 // Connect to MongoDB
-mongoose.connect(mongoUri)
-  .then(() => console.log('✅ Secondary Bot connected to MongoDB'))
-  .catch(err => console.error('❌ Secondary Bot MongoDB Connection Error:', err));
+if (typeof mongoose === 'undefined') {
+  try {
+    global.mongoose = require('mongoose');
+  } catch (e) {
+    console.error('❌ CRITICAL: Failed to require mongoose in secondary_bot.js:', e.message);
+  }
+}
+
+if (typeof mongoose !== 'undefined') {
+  mongoose.connect(mongoUri)
+    .then(() => console.log('✅ Secondary Bot connected to MongoDB'))
+    .catch(err => console.error('❌ Secondary Bot MongoDB Connection Error:', err));
+} else {
+  console.error('❌ CRITICAL: mongoose is still undefined after attempt to require.');
+}
 
 const bot = new TelegramBot(token, { polling: false });
 

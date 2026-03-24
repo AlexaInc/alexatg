@@ -1,6 +1,10 @@
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
 require('dotenv').config();
+const proxyHelper = require('./utils/proxyHelper');
+proxyHelper.configureAxios();
+proxyHelper.configureGlobal();
+
 const { spawn } = require('child_process');
 const path = require('path');
 const moment = require('moment-timezone');

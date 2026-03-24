@@ -61,6 +61,10 @@ module.exports = function (bot, deps) {
             return deps.dating.handleDatingCallback(query);
         }
 
+        if (data.startsWith('rank_')) {
+            return deps.ranking.handleCallback(query);
+        }
+
         // --- Remaining Handlers ---
         const message = query.message;
         const from = query.from;

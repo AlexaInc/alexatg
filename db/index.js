@@ -14,13 +14,18 @@ const Warning = require('./models/warning');
 const BroadcastId = require('./models/broadcastId');
 const CleanCommand = require('./models/cleanCommand');
 const WelcomeSettings = require('./models/welcomeSettings');
-
 const SpecialUser = require('./models/specialUser');
+const ActivitySchema = require('./models/activity');
+const { GlobalUserStatsSchema, GlobalGroupStatsSchema } = require('./models/globalStats');
 
 let secondaryDb = null;
 let CustomQuizModel = null;
 let UserQuizScoreModel = null;
 let QuizResultModel = null;
+
+let Activity = null;
+let GlobalUserStats = null;
+let GlobalGroupStats = null;
 
 async function connectToDatabases() {
   const MONGO_URI = process.env.mongouri;
@@ -40,6 +45,12 @@ async function connectToDatabases() {
       UserQuizScoreModel = secondaryDb.model("UserQuizScore", UserQuizScoreSchema);
       QuizResultModel = secondaryDb.model("QuizResult", QuizResultSchema);
     }
+
+    // Initialize models on the main database connection
+    Activity = mongoose.model("Activity", ActivitySchema);
+    GlobalUserStats = mongoose.model("GlobalUserStats", GlobalUserStatsSchema);
+    GlobalGroupStats = mongoose.model("GlobalGroupStats", GlobalGroupStatsSchema);
+
   } catch (err) {
     console.error("❌ MongoDB Connection Error:", err);
   }
@@ -59,6 +70,9 @@ module.exports = {
   CleanCommand,
   WelcomeSettings,
   SpecialUser, // Add SpecialUser here
+  Activity,
+  GlobalUserStats,
+  GlobalGroupStats,
   getCustomQuizModel: () => CustomQuizModel,
   getUserQuizScoreModel: () => UserQuizScoreModel,
   getQuizResultModel: () => QuizResultModel

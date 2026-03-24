@@ -184,6 +184,9 @@ const deps = {
   BroadcastId,
   CleanCommand,
   WelcomeSettings,
+  Activity,
+  GlobalUserStats,
+  GlobalGroupStats,
   get CustomQuizModel() { return db.getCustomQuizModel(); },
   get UserQuizScoreModel() { return db.getUserQuizScoreModel(); },
   groupChatIds: loadGroupIds(),
@@ -213,6 +216,7 @@ require('./commands/common')(bot, deps);
 require('./commands/admin')(bot, deps);
 require('./commands/owner')(bot, deps);
 require('./commands/games')(bot, deps);
+require('./commands/ranking')(bot, deps);
 require('./commands/welcome')(bot, deps);
 
 const datingModule = require('./modules/dating')(bot, deps);
@@ -231,6 +235,10 @@ bot.on('message', async (msg) => {
 
   try {
     await deps.saveUserMap(msg.chat.id, msg.from);
+
+    // ChatFight Activity Tracking & Flood Control
+    const { handleActivity } = require('./utils/activity');
+    await handleActivity(bot, deps, msg);
 
     // Check local Sets for fast response
     let isNew = false;

@@ -407,6 +407,11 @@ async function getUserbotClient() {
 
     if (!sessionData) return null;
 
+    if (!process.env.API_ID || !process.env.API_HASH) {
+      console.error("❌ API_ID or API_HASH is missing in .env. Userbot features will not work.");
+      return null;
+    }
+
     const client = new TelegramClient(new StringSession(sessionData), Number(process.env.API_ID), process.env.API_HASH, {
       connectionRetries: 3,
       receiveUpdates: false,

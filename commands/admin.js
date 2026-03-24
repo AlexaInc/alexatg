@@ -475,7 +475,7 @@ module.exports = function (bot, deps) {
   bot.onText(/^\/purgefrom/, async (msg) => {
     try {
       const permError = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID);
-      if (permError) return bot.sendMessage(msg.chat.id, permError);
+      if (permError && typeof permError === 'string') return bot.sendMessage(msg.chat.id, permError);
 
       const chatId = msg.chat.id;
       if (!msg.reply_to_message) return bot.sendMessage(chatId, "Usage: Reply to the *first* message with /purgefrom.");
@@ -486,6 +486,7 @@ module.exports = function (bot, deps) {
       bot.sendMessage(chatId, `✅ Start set. Now reply to the *last* message with /purgeto.`);
       bot.deleteMessage(chatId, msg.message_id).catch(() => { });
     } catch (error) {
+      console.error(error);
       bot.sendMessage(msg.chat.id, "An error occurred.");
     }
   });
@@ -493,7 +494,7 @@ module.exports = function (bot, deps) {
   bot.onText(/^\/purgeto/, async (msg) => {
     try {
       const permError = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID);
-      if (permError) return bot.sendMessage(msg.chat.id, permError);
+      if (permError && typeof permError === 'string') return bot.sendMessage(msg.chat.id, permError);
 
       const chatId = msg.chat.id;
       const userId = msg.from.id;
@@ -511,30 +512,31 @@ module.exports = function (bot, deps) {
       for (let i = startId; i <= endId; i++) ids.push(i);
       ids.push(msg.message_id);
 
-      bot.sendMessage(chatId, `♻️ Purging ${ids.length} messages...`).then(m => setTimeout(() => bot.deleteMessage(chatId, m.message_id).catch(() => { }), 5000));
+      const client = await deps.handlers.getUserbotClient();
+      if (!client) return bot.sendMessage(chatId, "❌ Userbot not configured. Contact bot owner.");
 
+      const userbotId = deps.handlers.getCachedUserbotId() || String((await client.getMe()).id);
+      await bot.promoteChatMember(chatId, userbotId, { can_delete_messages: true }).catch(() => { });
+      bot.sendMessage(chatId, `♻️ Purging ${ids.length} messages using userbot...`).then(m => setTimeout(() => bot.deleteMessage(chatId, m.message_id).catch(() => { }), 5000));
+
+      const entity = await deps.handlers.getJoinedEntity(client, bot, chatId);
       const chunks = deps.handlers.chunkArray(ids, 100);
       for (const chunk of chunks) {
-        try {
-          await bot.deleteMessages(chatId, chunk);
-        } catch (err) {
-          if (err.response?.statusCode === 429) {
-            await deps.handlers.sleep((err.response.parameters.retry_after || 1) * 1000);
-            await bot.deleteMessages(chatId, chunk);
-          }
-        }
-        await deps.handlers.sleep(1000);
+        await client.deleteMessages(entity, chunk, { revoke: true }).catch(() => { });
+        await deps.handlers.sleep(1500);
       }
       bot.sendMessage(chatId, "✅ Purge complete.");
+      await client.disconnect();
     } catch (error) {
-      bot.sendMessage(msg.chat.id, "An error occurred.");
+      console.error(error);
+      bot.sendMessage(msg.chat.id, "An error occurred: " + error.message);
     }
   });
 
   bot.onText(/^\/purge$/, async (msg) => {
     try {
       const permError = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID);
-      if (permError) return bot.sendMessage(msg.chat.id, permError);
+      if (permError && typeof permError === 'string') return bot.sendMessage(msg.chat.id, permError);
 
       const chatId = msg.chat.id;
       if (!msg.reply_to_message) return bot.sendMessage(chatId, "Usage: Reply to the start message and type /purge.");
@@ -542,22 +544,24 @@ module.exports = function (bot, deps) {
       const ids = [];
       for (let i = msg.reply_to_message.message_id; i <= msg.message_id; i++) ids.push(i);
 
-      bot.sendMessage(chatId, `♻️ Purging ${ids.length} messages...`).then(m => setTimeout(() => bot.deleteMessage(chatId, m.message_id).catch(() => { }), 5000));
+      const client = await deps.handlers.getUserbotClient();
+      if (!client) return bot.sendMessage(chatId, "❌ Userbot not configured. Contact bot owner.");
 
+      const userbotId = deps.handlers.getCachedUserbotId() || String((await client.getMe()).id);
+      await bot.promoteChatMember(chatId, userbotId, { can_delete_messages: true }).catch(() => { });
+      bot.sendMessage(chatId, `♻️ Purging ${ids.length} messages using userbot...`).then(m => setTimeout(() => bot.deleteMessage(chatId, m.message_id).catch(() => { }), 5000));
+
+      const entity = await deps.handlers.getJoinedEntity(client, bot, chatId);
       const chunks = deps.handlers.chunkArray(ids, 100);
       for (const chunk of chunks) {
-        try {
-          await bot.deleteMessages(chatId, chunk);
-        } catch (err) {
-          if (err.response?.statusCode === 429) {
-            await deps.handlers.sleep((err.response.parameters.retry_after || 1) * 1000);
-            await bot.deleteMessages(chatId, chunk);
-          }
-        }
-        await deps.handlers.sleep(1000);
+        await client.deleteMessages(entity, chunk, { revoke: true }).catch(() => { });
+        await deps.handlers.sleep(1500);
       }
+      bot.sendMessage(chatId, "✅ Purge complete.");
+      await client.disconnect();
     } catch (error) {
-      bot.sendMessage(msg.chat.id, "An error occurred.");
+      console.error(error);
+      bot.sendMessage(msg.chat.id, "An error occurred: " + error.message);
     }
   });
 
@@ -652,9 +656,6 @@ module.exports = function (bot, deps) {
   bot.onText(/^\/sweep/, async (msg) => {
     const chatId = msg.chat.id;
     const senderId = msg.from.id;
-    const { TelegramClient, Api } = require('telegram');
-    const { StringSession } = require('telegram/sessions');
-    const fs = require('fs');
 
     try {
       const caller = await bot.getChatMember(chatId, senderId);
@@ -662,29 +663,13 @@ module.exports = function (bot, deps) {
         return bot.sendMessage(chatId, "❌ Only the Creator can trigger a full sweep.");
       }
 
-      const sessionData = fs.readFileSync("session.txt", "utf8").trim();
-      const client = new TelegramClient(new StringSession(sessionData), process.env.API_ID, process.env.API_HASH, {
-        connectionRetries: 3,
-        receiveUpdates: false,
-        autoReconnect: false,
-      });
+      const client = await deps.handlers.getUserbotClient();
+      if (!client) return bot.sendMessage(chatId, "❌ Userbot not configured. Contact bot owner.");
 
-      await client.connect();
-      let wasAlreadyMember = true;
-      let entity;
+      const entity = await deps.handlers.getJoinedEntity(client, bot, chatId);
 
-      try {
-        entity = await client.getEntity(chatId);
-      } catch (e) {
-        wasAlreadyMember = false;
-        let inviteLink = await bot.exportChatInviteLink(chatId).catch(() => bot.getChat(chatId).then(c => c.invite_link));
-        if (!inviteLink) throw new Error("Could not get an invite link.");
-        const hash = inviteLink.split('/').pop().replace('+', '');
-        await client.invoke(new Api.messages.ImportChatInvite({ hash }));
-        entity = await client.getEntity(chatId);
-      }
-
-      await bot.promoteChatMember(chatId, process.env.USER_ACCOUNT_ID, { can_delete_messages: true });
+      const userbotId = deps.handlers.getCachedUserbotId() || String((await client.getMe()).id);
+      await bot.promoteChatMember(chatId, userbotId, { can_delete_messages: true });
       const statusMsg = await bot.sendMessage(chatId, "🧹 **Sweep started...**", { parse_mode: 'Markdown' });
       const endBoundaryId = statusMsg.message_id;
 
@@ -707,13 +692,13 @@ module.exports = function (bot, deps) {
           totalDeleted += idsToDelete.length;
           lastProcessedId = idsToDelete[idsToDelete.length - 1];
         }
-        await new Promise(r => setTimeout(r, 1500));
+        await deps.handlers.sleep(1500);
       }
 
-      if (!wasAlreadyMember) await client.invoke(new Api.channels.LeaveChannel({ channel: entity })).catch(() => { });
       await bot.sendMessage(chatId, `✅ **Full Sweep Complete**\nDeleted: \`${totalDeleted}\` messages.`, { parse_mode: 'Markdown' });
       await client.disconnect();
     } catch (err) {
+      console.error(err);
       bot.sendMessage(chatId, "❌ Sweep Error: " + err.message);
     }
   });
@@ -723,9 +708,7 @@ module.exports = function (bot, deps) {
     const args = msg.text.split(' ').slice(1);
     const action = args[0]?.toLowerCase();
     const chatId = msg.chat.id;
-    const { TelegramClient, Api } = require('telegram');
-    const { StringSession } = require('telegram/sessions');
-    const fs = require('fs');
+    const { Api } = require('telegram');
 
     if (!['start', 'on', 'end', 'off'].includes(action)) return bot.sendMessage(chatId, "⚠️ Usage: `/vc start` or `/vc end`.");
 
@@ -737,23 +720,12 @@ module.exports = function (bot, deps) {
         }
       }
 
-      const sessionData = fs.readFileSync("session.txt", "utf8").trim() || process.env.SESSION_STRING;
-      const client = new TelegramClient(new StringSession(sessionData), process.env.API_ID, process.env.API_HASH, { connectionRetries: 5, receiveUpdates: false });
-      await client.connect();
+      const client = await deps.handlers.getUserbotClient();
+      if (!client) return bot.sendMessage(chatId, "❌ Userbot not configured. Contact bot owner.");
 
-      let entity;
-      let shouldLeave = false;
-      try {
-        entity = await client.getEntity(chatId);
-      } catch (e) {
-        shouldLeave = true;
-        let inviteLink = await bot.exportChatInviteLink(chatId).catch(() => bot.getChat(chatId).then(c => c.invite_link));
-        const hash = inviteLink.split('/').pop().replace('+', '');
-        await client.invoke(new Api.messages.ImportChatInvite({ hash }));
-        entity = await client.getEntity(chatId);
-      }
-
-      await bot.promoteChatMember(chatId, process.env.USER_ACCOUNT_ID, { can_manage_video_chats: true });
+      const entity = await deps.handlers.getJoinedEntity(client, bot, chatId);
+      const userbotId = deps.handlers.getCachedUserbotId() || String((await client.getMe()).id);
+      await bot.promoteChatMember(chatId, userbotId, { can_manage_video_chats: true });
 
       if (['start', 'on'].includes(action)) {
         await client.invoke(new Api.phone.CreateGroupCall({ peer: entity, randomId: Math.floor(Math.random() * 1000000) })).catch(err => { if (err.errorMessage !== 'GROUPCALL_ALREADY_EXISTS') throw err; });
@@ -766,7 +738,6 @@ module.exports = function (bot, deps) {
         } else bot.sendMessage(chatId, "ℹ️ No active Video Chat found.");
       }
 
-      if (shouldLeave) await client.invoke(new Api.channels.LeaveChannel({ channel: entity })).catch(() => { });
       await client.disconnect();
     } catch (err) {
       bot.sendMessage(chatId, "❌ VC Error: " + err.message);
@@ -1385,21 +1356,68 @@ module.exports = function (bot, deps) {
   });
 
   // --- DELETE COMMAND ---
-  bot.onText(/^\/del/, async (msg) => {
+  bot.onText(/^\/del(?:\s+(all|me|my))?/, async (msg, match) => {
     const chatId = msg.chat.id;
-    const result = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID, 'can_delete_messages');
-    if (result && typeof result === 'string') return bot.sendMessage(chatId, result);
+    const arg = match[1]?.toLowerCase();
+    const isAll = arg === 'all';
+    const isMe = arg === 'me' || arg === 'my';
 
-    // Also allow missing permission object for consistency if needed, but del is usually admin only
-    if (result && typeof result === 'object' && result.errorType === 'MISSING_PERMISSION') {
-      return bot.sendMessage(chatId, "❌ You don't have permission to delete messages.");
+    // If it's NOT 'me' or 'my', we check for admin permissions
+    if (!isMe) {
+      const result = await deps.handlers.checkAdminPermissions(bot, msg, deps.botOWNER_IDS, deps.BOT_ID, 'can_delete_messages');
+      if (result && typeof result === 'string') return bot.sendMessage(chatId, result);
+      if (result && typeof result === 'object' && result.errorType === 'MISSING_PERMISSION') {
+        return bot.sendMessage(chatId, "❌ You don't have permission to delete others' messages.");
+      }
     }
 
-    if (!msg.reply_to_message) return bot.sendMessage(chatId, "⚠️ Reply to a message you want to delete.");
+    // Standard /del (no arg, needs reply)
+    if (!arg) {
+      if (!msg.reply_to_message) return bot.sendMessage(chatId, "⚠️ Reply to a message you want to delete.");
+      return bot.deleteMessage(chatId, msg.reply_to_message.message_id)
+        .then(() => bot.deleteMessage(chatId, msg.message_id).catch(() => { }))
+        .catch(() => bot.sendMessage(chatId, "❌ Failed to delete message."));
+    }
 
-    bot.deleteMessage(chatId, msg.reply_to_message.message_id)
-      .then(() => bot.deleteMessage(chatId, msg.message_id).catch(() => { }))
-      .catch(() => bot.sendMessage(chatId, "❌ Failed to delete message."));
+    // Userbot-based deletion for 'all' or 'me/my'
+    const targetUserId = isMe ? msg.from.id : (msg.reply_to_message?.from.id);
+    const targetName = isMe ? "you" : (msg.reply_to_message?.from.first_name || "User");
+
+    if (isAll && !msg.reply_to_message) {
+      return bot.sendMessage(chatId, "⚠️ Reply to a user's message to delete all their messages.");
+    }
+
+    const client = await deps.handlers.getUserbotClient();
+    if (!client) return bot.sendMessage(chatId, "❌ Userbot not configured. Contact bot owner.");
+
+    try {
+      const entity = await deps.handlers.getJoinedEntity(client, bot, chatId);
+      const userbotId = deps.handlers.getCachedUserbotId() || String((await client.getMe()).id);
+      await bot.promoteChatMember(chatId, userbotId, { can_delete_messages: true }).catch(() => { });
+
+      bot.sendMessage(chatId, `🧹 Deleting all messages from ${isMe ? "you" : `[${targetName}](tg://user?id=${targetUserId})`}...`, { parse_mode: 'Markdown' });
+
+      let totalDeleted = 0;
+      let lastId = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const messages = await client.getMessages(entity, { fromUser: targetUserId, limit: 100, offsetId: lastId });
+        if (!messages?.length) { hasMore = false; break; }
+        const msgIds = messages.map(m => m.id);
+        await client.deleteMessages(entity, msgIds, { revoke: true }).catch(() => { });
+        totalDeleted += msgIds.length;
+        lastId = messages[messages.length - 1].id;
+        if (messages.length < 100) hasMore = false;
+        await deps.handlers.sleep(1000);
+      }
+
+      bot.sendMessage(chatId, `✅ Removed \`${totalDeleted}\` messages from ${targetName}.`, { parse_mode: 'Markdown' });
+      await client.disconnect();
+    } catch (err) {
+      bot.sendMessage(chatId, `❌ Userbot Error: ${err.message}`);
+      await client.disconnect().catch(() => { });
+    }
   });
 
   // --- REFRESH/RELOAD COMMANDS ---

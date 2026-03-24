@@ -376,5 +376,59 @@ module.exports = {
   handleAnonymous,
   getGreeting,
   chunkArray,
-  sleep
+  sleep,
+  getUserbotClient,
+  getJoinedEntity,
+  setCachedUserbotId,
+  getCachedUserbotId
 };
+
+let cachedUserbotId = null;
+
+function setCachedUserbotId(id) {
+  cachedUserbotId = String(id);
+}
+
+function getCachedUserbotId() {
+  return cachedUserbotId;
+}
+
+async function getUserbotClient() {
+  const { TelegramClient } = require('telegram');
+  const { StringSession } = require('telegram/sessions');
+  const fs = require('fs');
+
+  try {
+    let sessionData = process.env.SESSION_STRING;
+
+    if (!sessionData && fs.existsSync("session.txt")) {
+      sessionData = fs.readFileSync("session.txt", "utf8").trim();
+    }
+
+    if (!sessionData) return null;
+
+    const client = new TelegramClient(new StringSession(sessionData), Number(process.env.API_ID), process.env.API_HASH, {
+      connectionRetries: 3,
+      receiveUpdates: false,
+      autoReconnect: false,
+    });
+    await client.connect();
+    return client;
+  } catch (err) {
+    console.error("Userbot client error:", err);
+    return null;
+  }
+}
+
+async function getJoinedEntity(client, bot, chatId) {
+  const { Api } = require('telegram');
+  try {
+    return await client.getEntity(chatId);
+  } catch (e) {
+    let inviteLink = await bot.exportChatInviteLink(chatId).catch(() => bot.getChat(chatId).then(c => c.invite_link));
+    if (!inviteLink) throw new Error("Could not get an invite link.");
+    const hash = inviteLink.split('/').pop().replace('+', '');
+    await client.invoke(new Api.messages.ImportChatInvite({ hash }));
+    return await client.getEntity(chatId);
+  }
+}

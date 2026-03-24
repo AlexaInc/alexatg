@@ -290,6 +290,22 @@ const initializeBot = async () => {
       ]
     };
 
+    // --- Initialize Userbot & Cache ID ---
+    const userbotClient = await helpers.getUserbotClient();
+    if (userbotClient) {
+      try {
+        const userbotMe = await userbotClient.getMe();
+        helpers.setCachedUserbotId(userbotMe.id);
+        console.log(`✅ Userbot connected & cached: ${userbotMe.username || 'Unknown'} (${userbotMe.id})`);
+      } catch (err) {
+        console.error("❌ Failed to cache userbot ID:", err.message);
+      } finally {
+        await userbotClient.disconnect().catch(() => { });
+      }
+    } else {
+      console.log("⚠️ Userbot not configured or failed to connect at startup.");
+    }
+
     console.log(`✅ ${ownerChats.length} contacts loaded. Bot is running!`);
   } catch (error) {
     console.error('CRITICAL ERROR on startup:', error.message);

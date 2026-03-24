@@ -6,6 +6,9 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const sharp = require('sharp');
 const axios = require('axios');
+const proxyHelper = require('./utils/proxyHelper');
+proxyHelper.configureAxios();
+proxyHelper.configureGlobal();
 // const { text } = require('stream/consumers'); // <-- Removed, this was unused
 
 // --- CONFIGURATION ---
@@ -124,14 +127,14 @@ async function createDummyAvatarBuffer(f, l, c, scale = 1) {
     let browser;
     let pngBuffer;
     try {
-        browser = await puppeteer.launch({ headless: true,executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-gpu'] });
+        browser = await puppeteer.launch({ headless: true, executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-gpu'] });
         const page = await browser.newPage();
         await page.setViewport({ width: avatarSize, height: avatarSize });
         await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' }); // Reverted from networkidle0
 
         const element = await page.$('#avatar');
         pngBuffer = await element.screenshot({ omitBackground: true }); // Screenshot just the circle
-        
+
     } catch (e) {
         console.error("❌ Error creating dummy avatar with Puppeteer:", e.message);
         return null; // Fallback
@@ -140,7 +143,7 @@ async function createDummyAvatarBuffer(f, l, c, scale = 1) {
             await browser.close();
         }
     }
-    
+
     return pngBuffer;
 }
 
@@ -182,7 +185,7 @@ async function getEmojiStatusBuffer(emojiId) {
             const pngBuffer = await sharp(imageResponse.data).png().toBuffer();
 
             fs.writeFileSync(cachePath, pngBuffer);
-            return pngBuffer; 
+            return pngBuffer;
 
         } catch (error) {
             console.warn(`[Attempt ${attempt}/${maxRetries}] Failed to fetch emoji status: ${error.message}`);
@@ -197,10 +200,10 @@ async function getEmojiStatusBuffer(emojiId) {
 }
 
 
-function escapeHtml(text) { 
-    if (!text) return ''; 
+function escapeHtml(text) {
+    if (!text) return '';
     // *** FIX: Corrected regex from /&g to /&/g ***
-    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;"); 
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 }
 
 // *** RESTORED: createTextChunkImageBuffer function ***
@@ -208,24 +211,24 @@ function createTextChunkImageBuffer(text, { fontSize = 20, color = '#FFFFFF' }) 
     const canvas = createCanvas(1, 1);
     const ctx = canvas.getContext('2d');
     // Use the *exact* font stack from node-canvas registration
-    ctx.font = `bold ${fontSize}px ${FONT_STACK}`; 
+    ctx.font = `bold ${fontSize}px ${FONT_STACK}`;
     const metrics = ctx.measureText(text);
     const textHeight = metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent;
     // *** FIX: Keep padding at 0 ***
-    const padding = 0; 
-    
+    const padding = 0;
+
     // *** FIX: Ensure width and height are at least 1px ***
     const canvasWidth = Math.max(1, metrics.width + 2 * padding);
     const canvasHeight = Math.max(1, textHeight + 2 * padding);
-    
-    const textCanvas = createCanvas(canvasWidth, canvasHeight); 
+
+    const textCanvas = createCanvas(canvasWidth, canvasHeight);
     const textCtx = textCanvas.getContext('2d');
     textCtx.font = `bold ${fontSize}px ${FONT_STACK}`; // Use the *exact* font stack
     textCtx.fillStyle = color;
     textCtx.textBaseline = 'alphabetic';
     // Draw text only if width > 0 to avoid potential issues
     if (metrics.width > 0) {
-        textCtx.fillText(text, padding, metrics.actualBoundingBoxAscent + padding); 
+        textCtx.fillText(text, padding, metrics.actualBoundingBoxAscent + padding);
     }
     return textCanvas.toBuffer('image/png');
 }
@@ -233,32 +236,32 @@ function createTextChunkImageBuffer(text, { fontSize = 20, color = '#FFFFFF' }) 
 // *** RESTORED: generateNameHtml function ***
 // *** RESTORED: generateNameHtml function ***
 function generateNameHtml(text, color, fontSize) {
-    const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
-    // Split by emoji AND whitespace 
-    const chunks = text.split(/(\s+|(?:\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff]))/).filter(Boolean);
-    let html = '';
+    const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
+    // Split by emoji AND whitespace 
+    const chunks = text.split(/(\s+|(?:\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff]))/).filter(Boolean);
+    let html = '';
 
-    for (const chunk of chunks) {
-        if (chunk.match(emojiRegex)) {
-            // It's an emoji
-            html += `<span class="name-emoji">${escapeHtml(chunk)}</span>`;
-        
-        // *** FIX: Check for whitespace chunk ***
-        } else if (chunk.match(/^\s+$/)) {
-            // It's whitespace. Render it as a span.
-            // We use 'style="white-space: pre;"' to ensure it's rendered exactly as-is.
-            html += `<span class="name-whitespace" style="white-space: pre;">${escapeHtml(chunk)}</span>`;
-        } else {
-            // It's a text chunk 
-            const trimmedChunk = chunk.trim(); // We can trim, as spaces are handled separately
-            if (trimmedChunk) { 
-                const chunkImageBuffer = createTextChunkImageBuffer(trimmedChunk, { fontSize: fontSize, color: color });
-                const chunkImageBase64 = `data:image/png;base64,${chunkImageBuffer.toString('base64')}`;
-                html += `<img class="name-chunk-image" src="${chunkImageBase64}" />`;
-            }
-        }
-    }
-    return html;
+    for (const chunk of chunks) {
+        if (chunk.match(emojiRegex)) {
+            // It's an emoji
+            html += `<span class="name-emoji">${escapeHtml(chunk)}</span>`;
+
+            // *** FIX: Check for whitespace chunk ***
+        } else if (chunk.match(/^\s+$/)) {
+            // It's whitespace. Render it as a span.
+            // We use 'style="white-space: pre;"' to ensure it's rendered exactly as-is.
+            html += `<span class="name-whitespace" style="white-space: pre;">${escapeHtml(chunk)}</span>`;
+        } else {
+            // It's a text chunk 
+            const trimmedChunk = chunk.trim(); // We can trim, as spaces are handled separately
+            if (trimmedChunk) {
+                const chunkImageBuffer = createTextChunkImageBuffer(trimmedChunk, { fontSize: fontSize, color: color });
+                const chunkImageBase64 = `data:image/png;base64,${chunkImageBuffer.toString('base64')}`;
+                html += `<img class="name-chunk-image" src="${chunkImageBase64}" />`;
+            }
+        }
+    }
+    return html;
 }
 
 
@@ -309,7 +312,7 @@ function highlightTextPatterns(wrappedText) {
 
     let outputHtml = '';
     const highlightColor = '#6ab8ed'; // Light blue for links/mentions/commands
-    
+
     for (const part of parts) {
         // *** FIX: Corrected regex from @w+ to @\w+ ***
         if (part.match(/^(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|(\/)\w+)$/)) {
@@ -332,30 +335,30 @@ function highlightTextPatterns(wrappedText) {
 
 
 // --- MAIN PUPPETEER FUNCTION ---
-async function createImage(firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage,replysendercolor) {
+async function createImage(firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor) {
     const scale = 4;
     const username = `${firstName} ${lastName}`.trim().replace(/\u200B/g, '');
     const nameColor = getTelegramDarkThemeColor(nameColorId);
 
     // --- UNIVERSAL FONT SIZING ---
     // All text elements will use this single size.
-    const UNIVERSAL_FONT_SIZE = 26 * scale; 
-    
+    const UNIVERSAL_FONT_SIZE = 26 * scale;
+
     // Set all font sizes to the universal size
     let messageFontSize = UNIVERSAL_FONT_SIZE;
-    let nameImageFontSize = UNIVERSAL_FONT_SIZE; 
+    let nameImageFontSize = UNIVERSAL_FONT_SIZE;
     let replySenderFontSize = UNIVERSAL_FONT_SIZE;
     let replyMessageFontSize = UNIVERSAL_FONT_SIZE;
 
     // Emoji size is relative to the text size
-    let nameEmojiFontSize = nameImageFontSize; 
+    let nameEmojiFontSize = nameImageFontSize;
 
     // Standardized layout values based on the universal font size
     let nameLineHeight = 34 * scale;
     let nameMarginBottom = 12 * scale;
     let messageLineHeight = 1.4;
     const replyLineHeight = 1.3;
-    const replyMarginBottom = 10 * scale; 
+    const replyMarginBottom = 10 * scale;
     // --- END UNIVERSAL FONT SIZING ---
 
 
@@ -363,7 +366,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const DEFAULT_MESSAGE_MAX_WIDTH = 650 * scale; // Max width for the MESSAGE text to wrap
     const BUBBLE_MIN_WIDTH = 250 * scale; // Minimum width for the bubble
     const REPLY_MESSAGE_MAX_LENGTH = 50; // Max characters for the reply message
-    
+
     // Pass the *original* message directly to the highlighter.
     // CSS will handle all the wrapping.
     const highlightedMessageHtml = highlightTextPatterns(message);
@@ -624,25 +627,25 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const BUBBLE_TAIL_WIDTH = 20 * scale; // Width of the bubble tail (the '::before' element)
     const BODY_PADDING_HORIZONTAL = (30 + 30) * scale; // Left and right padding of the body
 
-    const ESTIMATED_MAX_NAME_WIDTH = DEFAULT_MESSAGE_MAX_WIDTH * 1.5; 
-    
+    const ESTIMATED_MAX_NAME_WIDTH = DEFAULT_MESSAGE_MAX_WIDTH * 1.5;
+
     const VIEWPORT_WIDTH = BODY_PADDING_HORIZONTAL + AVATAR_WIDTH + AVATAR_MARGIN_RIGHT + BUBBLE_TAIL_WIDTH + Math.max(ESTIMATED_MAX_NAME_WIDTH, DEFAULT_MESSAGE_MAX_WIDTH + BUBBLE_PADDING_HORIZONTAL) + (50 * scale); // Add extra buffer
     const VIEWPORT_HEIGHT = 1200 * scale; // Default height, will be cropped later
 
-    const browser = await puppeteer.launch({ headless: true,executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-gpu','--no-proxy-server'] });
+    const browser = await puppeteer.launch({ headless: true, executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-gpu', '--no-proxy-server'] });
     const page = await browser.newPage();
-    await page.setViewport({ width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT }); 
+    await page.setViewport({ width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT });
     // Wait until dom is loaded (reverted from networkidle0)
-    await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' }); 
+    await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
 
     // *** FIX: Smart function to dynamically set message max-width ***
     await page.evaluate((defaultMessageWidth) => {
         // Measure the whole name line now that it contains images/spans
         const nameWidth = document.querySelector('.name-line')?.scrollWidth || 0;
-        
+
         const replySenderElement = document.querySelector('.reply-sender');
         const replyWidth = replySenderElement?.scrollWidth || 0;
-        
+
         // Content width is the wider of the name line or reply sender
         const contentWidth = Math.max(nameWidth, replyWidth);
 
@@ -663,7 +666,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 
     // --- DYNAMIC SIZING WITH INVISIBLE BORDER ---
     const stickerWidth = 2048;
-    
+
     const scaledPngBuffer = await sharp(finalPngBuffer)
         .resize({ width: stickerWidth, fit: 'inside', withoutEnlargement: true })
         .toBuffer();
@@ -672,7 +675,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const bubbleWidth = scaledMetadata.width || 0;
 
     const padding = Math.floor((stickerWidth - bubbleWidth) / 2);
-    
+
     const webpBuffer = await sharp(scaledPngBuffer)
         .extend({
             top: 0,
@@ -683,7 +686,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         })
         .webp({ quality: 90 })
         .toBuffer();
-        
+
     return webpBuffer;
 }
 

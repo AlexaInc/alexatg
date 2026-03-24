@@ -361,6 +361,8 @@ function toHTML(text, entities) {
       case 'spoiler': start = '<span class="tg-spoiler">'; end = "</span>"; break;
       case 'custom_emoji': start = `<tg-emoji emoji-id="${e.custom_emoji_id}">`; end = "</tg-emoji>"; break;
       case 'text_mention': start = `<a href="tg://user?id=${e.user.id}">`; end = "</a>"; break;
+      case 'blockquote': start = "<blockquote>"; end = "</blockquote>"; break;
+      case 'expandable_blockquote': start = "<blockquote expandable>"; end = "</blockquote>"; break;
     }
     if (start) {
       tags.push({ pos: e.offset, tag: start, type: 'start' });

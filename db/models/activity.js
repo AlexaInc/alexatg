@@ -4,6 +4,7 @@ const ActivitySchema = new mongoose.Schema({
     userId: { type: String, required: true, index: true },
     chatId: { type: String, required: true, index: true },
     username: String,
+    chatTitle: String,
     messages: {
         today: { type: Number, default: 0 },
         week: { type: Number, default: 0 },

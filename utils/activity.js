@@ -93,6 +93,7 @@ async function handleActivity(bot, deps, msg) {
         },
         $set: {
             username: msg.from.username || msg.from.first_name,
+            chatTitle: msg.chat.title || 'Private Chat',
             lastMessageAt: now
         }
     };

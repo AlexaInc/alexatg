@@ -9,6 +9,11 @@ function formatOrdinal(n) {
     return n + "°";
 }
 
+function escapeMarkdown(text) {
+    if (!text) return "";
+    return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+}
+
 function generateProgressBar(current, target) {
     const size = 10;
     const progress = Math.min(Math.floor((current / target) * size), size);
@@ -37,10 +42,12 @@ function formatProfile(stats, local, globalPos, localPos, totalUsers, totalGroup
 function formatLeaderboard(title, items, type, totalMessages, period) {
     let text = `📈 *${title} | ${period.toUpperCase()}*\n`;
     items.forEach((item, index) => {
-        const name = item.username || item.title || "Unknown";
-        const count = item.messages[period] || 0;
+        let name = item.username || item.title || item.chatTitle || "Unknown";
+        if (type === 'group' && item.chatTitle) name = item.chatTitle;
+
+        const count = item.messages ? (item.messages[period] || 0) : 0;
         const icon = type === 'group' ? '👥' : (index === 0 ? '👦🏻' : '👤');
-        text += `${index + 1}. ${icon} ${name} • ${formatNumber(count)}\n`;
+        text += `${index + 1}. ${statusIcon(index, type)} ${escapeMarkdown(name)} • ${formatNumber(count)}\n`;
     });
 
     if (totalMessages) {
@@ -50,9 +57,18 @@ function formatLeaderboard(title, items, type, totalMessages, period) {
     return text;
 }
 
+function statusIcon(index, type) {
+    if (type === 'group') return '👥';
+    if (index === 0) return '🥇';
+    if (index === 1) return '🥈';
+    if (index === 2) return '🥉';
+    return '👤';
+}
+
 module.exports = {
     formatNumber,
     formatOrdinal,
     formatProfile,
-    formatLeaderboard
+    formatLeaderboard,
+    escapeMarkdown
 };

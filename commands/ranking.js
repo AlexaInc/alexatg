@@ -1,4 +1,4 @@
-const { formatLeaderboard, formatProfile, formatNumber } = require('../utils/ui_ranking');
+const { formatLeaderboard, formatProfile, formatNumber, escapeMarkdown } = require('../utils/ui_ranking');
 
 module.exports = function (bot, deps) {
     const { Activity, GlobalUserStats, GlobalGroupStats } = deps;
@@ -62,13 +62,18 @@ module.exports = function (bot, deps) {
         const totalGroups = await GlobalGroupStats.countDocuments({});
 
         const text = formatProfile(stats, local, globalPos, localPos, totalUsers, totalGroups);
-        bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+        const escapedName = escapeMarkdown(msg.from.first_name);
+        // Add a nice header with the escaped name
+        const profileText = `👤 *PROFILE | ${escapedName.toUpperCase()}*\n` + text.replace('👤 *YOUR PROFILE*\n', '');
+
+        bot.sendMessage(msg.chat.id, profileText, { parse_mode: 'Markdown' });
     };
 
     const handleMyTop = async (msg, period = 'overall') => {
         const userId = msg.from.id.toString();
         const items = await Activity.find({ userId }).sort({ [`messages.${period}`]: -1 }).limit(10);
-        const text = formatLeaderboard(`MY TOP GROUPS | ${msg.from.first_name}`, items, 'group', null, period);
+        const escapedName = escapeMarkdown(msg.from.first_name);
+        const text = formatLeaderboard(`MY TOP GROUPS | ${escapedName}`, items, 'group', null, period);
         bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown', reply_markup: getKeyboard('rank_mytop', period) });
     };
 
@@ -81,7 +86,7 @@ module.exports = function (bot, deps) {
         const globalPosToday = await GlobalGroupStats.countDocuments({ 'messages.today': { $gt: group.messages.today } }) + 1;
         const globalPosWeek = await GlobalGroupStats.countDocuments({ 'messages.week': { $gt: group.messages.week } }) + 1;
 
-        let text = `📊 *STATS FOR ${group.title}*\n`;
+        let text = `📊 *STATS FOR ${escapeMarkdown(group.title)}*\n`;
         text += `👥 ChatFight detects ${group.userCount} users in this group.\n\n`;
 
         text += `➖ *Overall stats*\n`;
@@ -131,7 +136,17 @@ module.exports = function (bot, deps) {
             message_id: messageId,
             parse_mode: 'Markdown',
             reply_markup: getKeyboard(prefix + '_' + type, period)
-        }).catch(() => { });
+        }).catch(err => {
+            console.error("Error editing ranking message:", err.message);
+            if (err.message.includes("can't parse entities")) {
+                // Fallback to plain text if Markdown fails
+                bot.editMessageText(text.replace(/[*_`\[\]()]/g, ''), {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    reply_markup: getKeyboard(prefix + '_' + type, period)
+                }).catch(() => { });
+            }
+        });
     };
 
     const handleClearStats = async (msg) => {

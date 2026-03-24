@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const CustomQuizSchema = require('./models/quiz');
 const UserQuizScoreSchema = require('./models/userQuizScore');
+const QuizResultSchema = require('./models/quizResult');
 
 const Invite = require('./models/invite');
 const UserMap = require('./models/userMap');
@@ -19,6 +20,7 @@ const SpecialUser = require('./models/specialUser');
 let secondaryDb = null;
 let CustomQuizModel = null;
 let UserQuizScoreModel = null;
+let QuizResultModel = null;
 
 async function connectToDatabases() {
   const MONGO_URI = process.env.mongouri;
@@ -36,6 +38,7 @@ async function connectToDatabases() {
 
       CustomQuizModel = secondaryDb.model("Quiz", CustomQuizSchema);
       UserQuizScoreModel = secondaryDb.model("UserQuizScore", UserQuizScoreSchema);
+      QuizResultModel = secondaryDb.model("QuizResult", QuizResultSchema);
     }
   } catch (err) {
     console.error("❌ MongoDB Connection Error:", err);
@@ -57,5 +60,6 @@ module.exports = {
   WelcomeSettings,
   SpecialUser, // Add SpecialUser here
   getCustomQuizModel: () => CustomQuizModel,
-  getUserQuizScoreModel: () => UserQuizScoreModel
+  getUserQuizScoreModel: () => UserQuizScoreModel,
+  getQuizResultModel: () => QuizResultModel
 };

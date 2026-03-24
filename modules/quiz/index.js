@@ -6,6 +6,7 @@ module.exports = function (bot, db) {
 
   const getCustomQuizModel = () => db.getCustomQuizModel();
   const getUserQuizScoreModel = () => db.getUserQuizScoreModel();
+  const getQuizResultModel = () => db.getQuizResultModel();
 
   async function startQuiz(chatId, customQuizData = null) {
     if (quizSessions[chatId] && quizSessions[chatId].active) {
@@ -134,11 +135,20 @@ module.exports = function (bot, db) {
         // Save scores to DB
         for (const u of sorted) {
           try {
+            // Update all-time total score
             await getUserQuizScoreModel().updateOne(
               { groupId: chatId, userId: u.id },
               { $inc: { score: u.score }, firstName: u.name, username: u.username },
               { upsert: true }
             );
+            // Save individual result for time-based leaderboards
+            await getQuizResultModel().create({
+              groupId: chatId,
+              userId: u.id,
+              score: u.score,
+              firstName: u.name,
+              username: u.username
+            });
           } catch (e) {
             console.error("Error saving quiz score:", e);
           }
@@ -195,73 +205,132 @@ module.exports = function (bot, db) {
     }
   });
 
-  // Handle /qlead command (should be called from main message handler ideally, but for now we can register it)
+  // Handle /qlead command
   bot.onText(/^\/qlead/, async (msg) => {
     const chatId = msg.chat.id;
-    try {
-      const topUsers = await getUserQuizScoreModel().find({ groupId: chatId }).sort({ score: -1 }).limit(10);
-      let text = "🏆 **Quiz Leaderboard - Group** 🏆\n\n";
-      if (!topUsers.length) text += "No scores yet.";
-      else topUsers.forEach((u, i) => text += `${i + 1}. [${u.firstName}](tg://user?id=${u.userId}) — ${u.score} pts\n`);
-
-      bot.sendMessage(chatId, text, {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [[
-            { text: "👥 Group", callback_data: "qlead_group" },
-            { text: "🌍 Global", callback_data: "qlead_global" }
-          ]]
-        }
-      });
-    } catch (e) {
-      console.error(e);
-    }
+    return sendLeaderboard(chatId, null, 'group', 'alltime');
   });
 
-  async function handleLeaderboardCallback(query) {
-    const data = query.data;
-    const chatId = query.message.chat.id.toString();
-
+  async function sendLeaderboard(chatId, messageId, scope, period) {
     try {
+      const now = new Date();
+      let startDate = null;
+
+      if (period === 'today') {
+        startDate = new Date(now.setHours(0, 0, 0, 0));
+      } else if (period === 'weekly') {
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      } else if (period === 'monthly') {
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+
       let topUsers;
-      let title;
-      if (data.includes('group')) {
-        topUsers = await getUserQuizScoreModel().find({ groupId: chatId }).sort({ score: -1 }).limit(10);
-        title = "Group";
+      const matchStage = {};
+      if (scope === 'group') matchStage.groupId = chatId.toString();
+      if (startDate) matchStage.timestamp = { $gte: startDate };
+
+      if (period === 'alltime') {
+        if (scope === 'group') {
+          topUsers = await getUserQuizScoreModel().find({ groupId: chatId.toString() }).sort({ score: -1 }).limit(10);
+        } else {
+          topUsers = await getUserQuizScoreModel().aggregate([
+            { $group: { _id: "$userId", totalScore: { $sum: "$score" }, firstName: { $first: "$firstName" } } },
+            { $sort: { totalScore: -1 } },
+            { $limit: 10 }
+          ]);
+        }
       } else {
-        topUsers = await getUserQuizScoreModel().aggregate([
-          { $group: { _id: "$userId", totalScore: { $sum: "$score" }, firstName: { $first: "$firstName" } } },
+        topUsers = await getQuizResultModel().aggregate([
+          { $match: matchStage },
+          {
+            $group: {
+              _id: "$userId",
+              totalScore: { $sum: "$score" },
+              firstName: { $first: "$firstName" }
+            }
+          },
           { $sort: { totalScore: -1 } },
           { $limit: 10 }
         ]);
-        title = "Global";
       }
 
-      let text = `🏆 *Quiz Leaderboard - ${title}* 🏆\n\n`;
-      if (!topUsers.length) text += "No scores yet.";
-      else topUsers.forEach((u, i) => {
-        const name = u.firstName || "User";
-        const score = u.score || u.totalScore;
-        const id = u.userId || u._id;
-        text += `${i + 1}. [${name}](tg://user?id=${id}) — ${score} pts\n`;
-      });
+      const periodLabels = { today: "Today", weekly: "Weekly", monthly: "Monthly", alltime: "All-time" };
+      const scopeLabels = { group: "Group", global: "Global" };
 
-      bot.editMessageText(text, {
-        chat_id: chatId,
-        message_id: query.message.message_id,
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [[
-            { text: "👥 Group", callback_data: `qlead_group_${chatId}` },
-            { text: "🌍 Global", callback_data: `qlead_global_${chatId}` }
-          ]]
-        }
-      });
-      bot.answerCallbackQuery(query.id);
+      let text = `🏆 *Quiz Leaderboard - ${scopeLabels[scope]} (${periodLabels[period]})* 🏆\n\n`;
+      if (!topUsers || topUsers.length === 0) {
+        text += "No scores found for this period.";
+      } else {
+        topUsers.forEach((u, i) => {
+          const name = u.firstName || "User";
+          const score = u.score !== undefined ? u.score : u.totalScore;
+          const id = u.userId || u._id;
+          text += `${i + 1}. [${name}](tg://user?id=${id}) — ${score} pts\n`;
+        });
+      }
+
+      const getIcon = (curr, target) => curr === target ? "🔘" : "";
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: `${getIcon(scope, 'group')} Group`, callback_data: `ql_alltime_group` }, // Defaulting to alltime when switching scope
+            { text: `${getIcon(scope, 'global')} Global`, callback_data: `ql_alltime_global` }
+          ],
+          [
+            { text: `${getIcon(period, 'today')} Today`, callback_data: `ql_today_${scope}` },
+            { text: `${getIcon(period, 'weekly')} Weekly`, callback_data: `ql_weekly_${scope}` }
+          ],
+          [
+            { text: `${getIcon(period, 'monthly')} Monthly`, callback_data: `ql_monthly_${scope}` },
+            { text: `${getIcon(period, 'alltime')} All-time`, callback_data: `ql_alltime_${scope}` }
+          ]
+        ]
+      };
+
+      // Fix callback data for scope switch to preserve current period if possible, 
+      // but let's keep it simple: switching scope resets to all-time for now, or use template:
+      keyboard.inline_keyboard[0][0].callback_data = `ql_${period}_group`;
+      keyboard.inline_keyboard[0][1].callback_data = `ql_${period}_global`;
+
+      if (messageId) {
+        bot.editMessageText(text, {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        }).catch(() => { });
+      } else {
+        bot.sendMessage(chatId, text, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        });
+      }
     } catch (e) {
-      console.error(e);
-      bot.answerCallbackQuery(query.id, { text: "Error fetching leaderboard." });
+      console.error("Leaderboard Error:", e);
     }
+  }
+
+  async function handleLeaderboardCallback(query) {
+    const data = query.data;
+    const chatId = query.message.chat.id;
+    const messageId = query.message.message_id;
+
+    let period = 'alltime';
+    let scope = 'group';
+
+    if (data.startsWith('ql_')) {
+      const parts = data.split('_');
+      if (parts.length >= 3) {
+        period = parts[1];
+        scope = parts[2];
+      }
+    } else if (data.includes('global')) {
+      scope = 'global';
+    }
+
+    await sendLeaderboard(chatId, messageId, scope, period);
+    bot.answerCallbackQuery(query.id);
   }
 
   async function stopQuiz(chatId) {

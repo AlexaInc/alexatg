@@ -53,7 +53,7 @@ module.exports = function (bot, deps) {
             return deps.quiz.handleReadyCallback(query);
         }
 
-        if (data.startsWith('qlead_')) {
+        if (data.startsWith('qlead_') || data.startsWith('ql_')) {
             return deps.quiz.handleLeaderboardCallback(query);
         }
 

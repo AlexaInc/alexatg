@@ -1,11 +1,12 @@
-const TelegramBot = require("node-telegram-bot-api");
-require('./web');
-
-const mongoose = require("mongoose");
 require('dotenv').config();
 const proxyHelper = require('./utils/proxyHelper');
 proxyHelper.configureAxios();
 proxyHelper.configureGlobal();
+
+const TelegramBot = require("node-telegram-bot-api");
+require('./web');
+
+const mongoose = require("mongoose");
 
 const { spawn } = require('child_process');
 const path = require('path');

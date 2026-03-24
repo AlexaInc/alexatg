@@ -1,3 +1,8 @@
+require('dotenv').config();
+const proxyHelper = require('./utils/proxyHelper');
+proxyHelper.configureAxios();
+proxyHelper.configureGlobal();
+
 const puppeteer = require('puppeteer');
 // *** RESTORED: createCanvas, registerFont from 'canvas' ***
 const { createCanvas, registerFont } = require('canvas');
@@ -6,9 +11,6 @@ const fsPromises = require('fs').promises;
 const path = require('path');
 const sharp = require('sharp');
 const axios = require('axios');
-const proxyHelper = require('./utils/proxyHelper');
-proxyHelper.configureAxios();
-proxyHelper.configureGlobal();
 // const { text } = require('stream/consumers'); // <-- Removed, this was unused
 
 // --- CONFIGURATION ---

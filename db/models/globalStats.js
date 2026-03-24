@@ -24,7 +24,10 @@ const GlobalGroupStatsSchema = new mongoose.Schema({
     lastActiveAt: { type: Date, default: Date.now }
 });
 
+const GlobalUserStats = mongoose.model("GlobalUserStats", GlobalUserStatsSchema);
+const GlobalGroupStats = mongoose.model("GlobalGroupStats", GlobalGroupStatsSchema);
+
 module.exports = {
-    GlobalUserStatsSchema,
-    GlobalGroupStatsSchema
+    GlobalUserStats,
+    GlobalGroupStats
 };

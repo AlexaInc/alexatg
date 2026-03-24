@@ -15,4 +15,4 @@ const ActivitySchema = new mongoose.Schema({
 // Composite index for fast lookups of a user in a specific chat
 ActivitySchema.index({ userId: 1, chatId: 1 }, { unique: true });
 
-module.exports = ActivitySchema;
+module.exports = mongoose.model("Activity", ActivitySchema);

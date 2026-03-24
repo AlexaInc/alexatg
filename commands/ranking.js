@@ -149,6 +149,96 @@ module.exports = function (bot, deps) {
         });
     };
 
+    const handleFetchHistory = async (msg) => {
+        if (!deps.botOWNER_IDS.includes(msg.from.id)) {
+            return bot.sendMessage(msg.chat.id, "❌ Restricted to owners.");
+        }
+
+        const args = (msg.text || '').split(' ');
+        const limit = parseInt(args[1]) || 500;
+        const chatId = msg.chat.id.toString();
+
+        const statusMsg = await bot.sendMessage(msg.chat.id, `⏳ **Fetching ${limit} messages using Userbot...**`, { parse_mode: 'Markdown' });
+
+        try {
+            const client = await deps.handlers.getUserbotClient();
+            if (!client) return bot.editMessageText("❌ Userbot not configured.", { chat_id: msg.chat.id, message_id: statusMsg.message_id });
+
+            const entity = await deps.handlers.getJoinedEntity(client, bot, chatId);
+            const messages = await client.getMessages(entity, { limit });
+
+            if (!messages || messages.length === 0) {
+                await client.disconnect();
+                return bot.editMessageText("ℹ️ No historical messages found.", { chat_id: msg.chat.id, message_id: statusMsg.message_id });
+            }
+
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const weekStart = new Date(now);
+            weekStart.setDate(now.getDate() - now.getDay());
+
+            const userCounts = {}; // userId -> { overall, today, week, name }
+            let totalGroupMessages = 0;
+            let totalGroupToday = 0;
+            let totalGroupWeek = 0;
+
+            for (const m of messages) {
+                if (!m.fromId || !m.fromId.userId) continue;
+                const uid = m.fromId.userId.toString();
+                const date = new Date(m.date * 1000);
+
+                if (!userCounts[uid]) userCounts[uid] = { overall: 0, today: 0, week: 0, name: "User" };
+                userCounts[uid].overall++;
+                totalGroupMessages++;
+
+                if (date >= today) {
+                    userCounts[uid].today++;
+                    totalGroupToday++;
+                }
+                if (date >= weekStart) {
+                    userCounts[uid].week++;
+                    totalGroupWeek++;
+                }
+            }
+
+            // Perform updates
+            const userIds = Object.keys(userCounts);
+            for (const uid of userIds) {
+                const u = userCounts[uid];
+                await Activity.updateOne(
+                    { chatId, userId: uid },
+                    { $inc: { 'messages.overall': u.overall, 'messages.today': u.today, 'messages.week': u.week } },
+                    { upsert: true }
+                );
+                await GlobalUserStats.updateOne(
+                    { userId: uid },
+                    { $inc: { 'messages.overall': u.overall, 'messages.today': u.today, 'messages.week': u.week } },
+                    { upsert: true }
+                );
+            }
+
+            await GlobalGroupStats.updateOne(
+                { chatId },
+                {
+                    $inc: { 'messages.overall': totalGroupMessages, 'messages.today': totalGroupToday, 'messages.week': totalGroupWeek },
+                    $set: { title: msg.chat.title || 'Unknown Group' }
+                },
+                { upsert: true }
+            );
+
+            await bot.editMessageText(`✅ **Sync Complete!**\nProcessed \`${messages.length}\` messages.\nUpdated stats for \`${userIds.length}\` users.`, {
+                chat_id: msg.chat.id,
+                message_id: statusMsg.message_id,
+                parse_mode: 'Markdown'
+            });
+
+            await client.disconnect();
+        } catch (err) {
+            console.error("FetchHistory Error:", err);
+            bot.editMessageText("❌ Error: " + err.message, { chat_id: msg.chat.id, message_id: statusMsg.message_id });
+        }
+    };
+
     const handleClearStats = async (msg) => {
         if (!deps.botOWNER_IDS.includes(msg.from.id)) {
             return bot.sendMessage(msg.chat.id, "❌ This command is restricted to bot owners.");
@@ -172,6 +262,7 @@ module.exports = function (bot, deps) {
     bot.onText(/\/(profile|rofile)/, (msg) => handleProfile(msg));
     bot.onText(/\/mytop/, (msg) => handleMyTop(msg));
     bot.onText(/\/groupstats/, (msg) => handleGroupStats(msg));
+    bot.onText(/\/fetchhistory/, (msg) => handleFetchHistory(msg));
     bot.onText(/\/clearstats/, (msg) => handleClearStats(msg));
 
     // Export for manual callback routing if needed

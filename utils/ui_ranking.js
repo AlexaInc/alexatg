@@ -46,8 +46,13 @@ function formatLeaderboard(title, items, type, totalMessages, period) {
         if (type === 'group' && item.chatTitle) name = item.chatTitle;
 
         const count = item.messages ? (item.messages[period] || 0) : 0;
-        const icon = type === 'group' ? '👥' : (index === 0 ? '👦🏻' : '👤');
-        text += `${index + 1}. ${statusIcon(index, type)} ${escapeMarkdown(name)} • ${formatNumber(count)}\n`;
+        let nameDisplay = escapeMarkdown(name);
+
+        if (type === 'user' && item.userId) {
+            nameDisplay = `[${nameDisplay}](tg://user?id=${item.userId})`;
+        }
+
+        text += `${index + 1}. ${statusIcon(index, type)} ${nameDisplay} • ${formatNumber(count)}\n`;
     });
 
     if (totalMessages) {

@@ -292,7 +292,7 @@ module.exports = function (bot, deps) {
 
             // ====== Filter Check ======
             const content = (msg.text || msg.caption || "").trim() || msg.sticker?.emoji || "";
-            const matchedFilter = Filters.checkFilters(String(chatId), content);
+            const matchedFilter = await Filters.checkFilters(String(chatId), content);
 
             if (matchedFilter) {
                 const replyTo = { reply_to_message_id: msg.message_id };

@@ -279,7 +279,7 @@ module.exports = function (bot, deps) {
     // Fix: result.type === "text" uses result.file_id which is msg.text
 
     try {
-      deps.Filters.addFilter(String(chatId), newFilter);
+      await deps.Filters.addFilter(String(chatId), newFilter);
       bot.sendMessage(chatId, "✔ Filter saved!\n\nTriggers:\n" + triggers.map(x => `• ${x}`).join("\n"));
     } catch (error) {
       bot.sendMessage(chatId, "❌ Error saving filter.");
@@ -300,9 +300,9 @@ module.exports = function (bot, deps) {
     if (triggers.length === 0) return bot.sendMessage(chatId, "❌ Provide trigger(s) to remove.");
 
     let removedCount = 0;
-    triggers.forEach(trigger => {
-      if (deps.Filters.removeFilter(String(chatId), trigger)) removedCount++;
-    });
+    for (const trigger of triggers) {
+      if (await deps.Filters.removeFilter(String(chatId), trigger)) removedCount++;
+    }
 
     if (removedCount > 0) {
       bot.sendMessage(chatId, `✅ Removed ${removedCount} filter(s).`);
@@ -346,7 +346,7 @@ module.exports = function (bot, deps) {
   // --- FILTERS COMMAND ---
   bot.onText(/^\/filters(?:\s|$|@)/, async (msg) => {
     if (!deps.handlers.checkCommand(msg, '/filters', deps.BOT_USERNAME)) return;
-    const allFilters = deps.Filters.getFilters(String(msg.chat.id));
+    const allFilters = await deps.Filters.getFilters(String(msg.chat.id));
     if (!allFilters || allFilters.length === 0) return bot.sendMessage(msg.chat.id, "❌ No filters in this chat.");
 
     let filterList = `📋 *Filters in this chat: ${allFilters.length}*\n\n`;

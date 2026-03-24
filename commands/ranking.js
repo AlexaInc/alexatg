@@ -6,12 +6,15 @@ module.exports = function (bot, deps) {
     const periods = ['today', 'week', 'overall'];
 
     const getKeyboard = (prefix, currentPeriod) => {
+        const createBtn = (p) => ({
+            text: p === currentPeriod ? `• ${p.toUpperCase()} •` : p.toUpperCase(),
+            callback_data: `${prefix}_${p}`
+        });
+
         return {
             inline_keyboard: [
-                periods.map(p => ({
-                    text: p === currentPeriod ? `• ${p.toUpperCase()} •` : p.toUpperCase(),
-                    callback_data: `${prefix}_${p}`
-                }))
+                [createBtn('overall')],
+                [createBtn('today'), createBtn('week')]
             ]
         };
     };

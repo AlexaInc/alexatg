@@ -1395,6 +1395,15 @@ module.exports = function (bot, deps) {
       const userbotId = deps.handlers.getCachedUserbotId() || String((await client.getMe()).id);
       await bot.promoteChatMember(chatId, userbotId, { can_delete_messages: true }).catch(() => { });
 
+      // Resolve target user to ensure Userbot has cached the entity
+      let targetEntity = targetUserId;
+      try {
+        targetEntity = await client.getEntity(targetUserId);
+      } catch (e) {
+        // Fallback: If not found, targetUserId as raw ID might still work or we try searching in chat
+        console.log(`Entity resolution for ${targetUserId} failed, using raw ID.`);
+      }
+
       bot.sendMessage(chatId, `🧹 Deleting all messages from ${isMe ? "you" : `[${targetName}](tg://user?id=${targetUserId})`}...`, { parse_mode: 'Markdown' });
 
       let totalDeleted = 0;
@@ -1402,7 +1411,7 @@ module.exports = function (bot, deps) {
       let hasMore = true;
 
       while (hasMore) {
-        const messages = await client.getMessages(entity, { fromUser: targetUserId, limit: 100, offsetId: lastId });
+        const messages = await client.getMessages(entity, { fromUser: targetEntity, limit: 100, offsetId: lastId });
         if (!messages?.length) { hasMore = false; break; }
         const msgIds = messages.map(m => m.id);
         await client.deleteMessages(entity, msgIds, { revoke: true }).catch(() => { });

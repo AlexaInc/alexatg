@@ -11,6 +11,8 @@ const helpers = require('./utils/helpers');
 const { loadGroupIds, saveGroupIds, saveUserIds, loadUserIds } = require('./utils/storage');
 const { updateUserCount_Optimized, checkUserCount, updateUserLimit } = require('./utils/aiLimit');
 const db = require('./db/index');
+const ActivitySchema = require("./db/models/activity");
+const { GlobalUserStatsSchema } = require("./db/models/globalStats");
 const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning, BroadcastId, CleanCommand, WelcomeSettings, SpecialUser } = db;
 
 // --- CONFIG ---
@@ -184,9 +186,9 @@ const deps = {
   BroadcastId,
   CleanCommand,
   WelcomeSettings,
-  Activity,
-  GlobalUserStats,
-  GlobalGroupStats,
+  ActivitySchema,
+  GlobalUserStatsSchema,
+  GlobalGroupStatsSchema,
   get CustomQuizModel() { return db.getCustomQuizModel(); },
   get UserQuizScoreModel() { return db.getUserQuizScoreModel(); },
   groupChatIds: loadGroupIds(),

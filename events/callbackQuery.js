@@ -111,12 +111,19 @@ module.exports = function (bot, deps) {
         const ui = require('../utils/ui');
 
         const editMessage = (text, markup) => {
-            bot.editMessageCaption(text, {
+            const options = {
                 chat_id: chatId,
                 message_id: messageId,
                 parse_mode: 'HTML',
                 reply_markup: markup
-            }).catch(() => { });
+            };
+
+            // If the message has a photo or a caption, we use editMessageCaption
+            if (query.message.photo || query.message.caption !== undefined) {
+                bot.editMessageCaption(text, options).catch(() => { });
+            } else {
+                bot.editMessageText(text, options).catch(() => { });
+            }
         };
 
         switch (data) {

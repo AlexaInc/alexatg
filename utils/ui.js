@@ -72,16 +72,18 @@ const helpTexts = {
 • /mu - Mute a user | /unmu - Unmute
 • /warn - Warn a user | /unwarn - Remove
 • /prom - Promote user | /dem - Demote
-• /pin - Pin a message | /del - Delete
+• /pin - Pin info | /del - Delete msg
+• /del all - Delete user msgs <i>(Reply required)</i>
+• /del me - Delete your own group messages
 • /purge - Purge range of msgs
 • /filters - Manage chat filters
 • /cleancommand [mode] - Auto-delete commands
 • /keepcommand - Disable command auto-delete
-• /accepton [n] - Limit speech to invitees
-• /antilink - Configure link protection
+• /accepton [n] - Invite threshold
+• /antilink - Link protection settings
 • /refresh - Reload admin list cache
-• /ano - Identity unmasking for anon admins
-• !free - Manually unlock a participant`,
+• /ano - Identity unmask for anons
+• !free - Unlock restricted participant`,
 
     welcome: `👋 <b>Welcome & Goodbye:</b>
 • /welcome [on/off] - Toggle welcome

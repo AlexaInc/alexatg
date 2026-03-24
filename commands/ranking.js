@@ -134,6 +134,22 @@ module.exports = function (bot, deps) {
         }).catch(() => { });
     };
 
+    const handleClearStats = async (msg) => {
+        if (!deps.botOWNER_IDS.includes(msg.from.id)) {
+            return bot.sendMessage(msg.chat.id, "❌ This command is restricted to bot owners.");
+        }
+
+        try {
+            await Activity.deleteMany({});
+            await GlobalUserStats.deleteMany({});
+            await GlobalGroupStats.deleteMany({});
+            bot.sendMessage(msg.chat.id, "✅ All ranking statistics have been cleared successfully.");
+        } catch (err) {
+            console.error("Error clearing stats:", err);
+            bot.sendMessage(msg.chat.id, "❌ An error occurred while clearing statistics.");
+        }
+    };
+
     // Slash commands
     bot.onText(/\/ranking/, (msg) => handleRanking(msg));
     bot.onText(/\/topusers/, (msg) => handleTopUsers(msg));
@@ -141,6 +157,7 @@ module.exports = function (bot, deps) {
     bot.onText(/\/(profile|rofile)/, (msg) => handleProfile(msg));
     bot.onText(/\/mytop/, (msg) => handleMyTop(msg));
     bot.onText(/\/groupstats/, (msg) => handleGroupStats(msg));
+    bot.onText(/\/clearstats/, (msg) => handleClearStats(msg));
 
     // Export for manual callback routing if needed
     deps.ranking = { handleCallback };

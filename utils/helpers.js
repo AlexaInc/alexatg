@@ -413,9 +413,11 @@ async function getUserbotClient() {
     }
 
     const client = new TelegramClient(new StringSession(sessionData), Number(process.env.API_ID), process.env.API_HASH, {
-      connectionRetries: 3,
+      connectionRetries: 10,
+      requestRetries: 5,
+      retryDelay: 2000,
       receiveUpdates: false,
-      autoReconnect: false,
+      autoReconnect: true,
     });
     await client.connect();
     return client;

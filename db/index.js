@@ -2,6 +2,12 @@ const mongoose = require('mongoose');
 const CustomQuizSchema = require('./models/quiz');
 const UserQuizScoreSchema = require('./models/userQuizScore');
 const QuizResultSchema = require('./models/quizResult');
+const HangmanScoreSchema = require('./models/hangmanScore');
+const HangmanResultSchema = require('./models/hangmanResult');
+const WordchainScoreSchema = require('./models/wordchainScore');
+const WordchainResultSchema = require('./models/wordchainResult');
+const DatingProfileSchema = require('./models/datingProfile');
+const DatingLikeSchema = require('./models/datingLike');
 
 const Invite = require('./models/invite');
 const UserMap = require('./models/userMap');
@@ -19,13 +25,21 @@ const Activity = require('./models/activity');
 const { GlobalUserStats, GlobalGroupStats } = require('./models/globalStats');
 
 let secondaryDb = null;
+let datingDb = null;
 let CustomQuizModel = null;
 let UserQuizScoreModel = null;
 let QuizResultModel = null;
+let HangmanScoreModel = null;
+let HangmanResultModel = null;
+let WordchainScoreModel = null;
+let WordchainResultModel = null;
+let DatingProfileModel = null;
+let DatingLikeModel = null;
 
 async function connectToDatabases() {
   const MONGO_URI = process.env.mongouri;
   const SECONDARY_MONGO_URI = process.env.SECONDARY_MONGO_URI;
+  const DATING_MONGO_URI = process.env.DATING_MONGO_URI;
 
   try {
     await mongoose.connect(MONGO_URI);
@@ -40,6 +54,20 @@ async function connectToDatabases() {
       CustomQuizModel = secondaryDb.model("Quiz", CustomQuizSchema);
       UserQuizScoreModel = secondaryDb.model("UserQuizScore", UserQuizScoreSchema);
       QuizResultModel = secondaryDb.model("QuizResult", QuizResultSchema);
+      HangmanScoreModel = secondaryDb.model("HangmanScore", HangmanScoreSchema);
+      HangmanResultModel = secondaryDb.model("HangmanResult", HangmanResultSchema);
+      WordchainScoreModel = secondaryDb.model("WordchainScore", WordchainScoreSchema);
+      WordchainResultModel = secondaryDb.model("WordchainResult", WordchainResultSchema);
+    }
+
+    if (DATING_MONGO_URI) {
+      datingDb = mongoose.createConnection(DATING_MONGO_URI);
+
+      datingDb.on("connected", () => console.log("✅ Dating MongoDB Connected"));
+      datingDb.on("error", (err) => console.error("❌ Dating MongoDB Connection Error:", err));
+
+      DatingProfileModel = datingDb.model("DatingProfile", DatingProfileSchema);
+      DatingLikeModel = datingDb.model("DatingLike", DatingLikeSchema);
     }
   } catch (err) {
     console.error("❌ MongoDB Connection Error:", err);
@@ -65,5 +93,11 @@ module.exports = {
   GlobalGroupStats,
   getCustomQuizModel: () => CustomQuizModel,
   getUserQuizScoreModel: () => UserQuizScoreModel,
-  getQuizResultModel: () => QuizResultModel
+  getQuizResultModel: () => QuizResultModel,
+  getHangmanScoreModel: () => HangmanScoreModel,
+  getHangmanResultModel: () => HangmanResultModel,
+  getWordchainScoreModel: () => WordchainScoreModel,
+  getWordchainResultModel: () => WordchainResultModel,
+  getDatingProfileModel: () => DatingProfileModel,
+  getDatingLikeModel: () => DatingLikeModel
 };

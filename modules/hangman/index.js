@@ -1,42 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 
-module.exports = function (bot, options = {}) {
-  const LEADERBOARD_FILE = options.leaderboardFile || 'leaderboard.json';
+module.exports = function (bot, db, options = {}) {
   const FILE_PATH = options.wordsFile || 'words.txt';
   const MAX_WRONG_GUESSES = 6;
   const MAX_PLAYERS = 4;
   const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
   const CHECK_INTERVAL_MS = 30 * 1000;
 
-  let leaderboard = {};
+  const getHangmanScoreModel = () => db.getHangmanScoreModel();
+  const getHangmanResultModel = () => db.getHangmanResultModel();
+
   let wordList = [];
   const gameSessions = {};
 
   // --- INITIALIZATION ---
-  function loadLeaderboard() {
-    try {
-      if (fs.existsSync(LEADERBOARD_FILE)) {
-        const fileContent = fs.readFileSync(LEADERBOARD_FILE, 'utf8');
-        leaderboard = JSON.parse(fileContent);
-      } else {
-        leaderboard = {};
-      }
-    } catch (err) {
-      console.error('Error loading leaderboard:', err);
-      leaderboard = {};
-    }
-  }
-
-  function saveLeaderboard() {
-    try {
-      const fileContent = JSON.stringify(leaderboard, null, 2);
-      fs.writeFileSync(LEADERBOARD_FILE, fileContent, 'utf8');
-    } catch (err) {
-      console.error('Error saving leaderboard:', err);
-    }
-  }
-
   try {
     const fileContent = fs.readFileSync(FILE_PATH, 'utf8');
     wordList = fileContent
@@ -47,8 +25,6 @@ module.exports = function (bot, options = {}) {
   } catch (err) {
     console.error(`Error reading ${FILE_PATH}:`, err.message);
   }
-
-  loadLeaderboard();
 
   // --- HELPERS ---
   function calculatePlayerPoints(player) {
@@ -114,6 +90,39 @@ module.exports = function (bot, options = {}) {
 
   setInterval(checkInactiveGames, CHECK_INTERVAL_MS);
 
+  // --- SAVE SCORES TO MONGODB ---
+  async function saveGameResults(chatId, players, won) {
+    try {
+      for (const pId in players) {
+        const p = players[pId];
+        const pts = won ? calculatePlayerPoints(p) : 0;
+
+        // Update all-time score
+        await getHangmanScoreModel().updateOne(
+          { groupId: chatId.toString(), userId: pId },
+          {
+            $inc: { points: pts, gamesPlayed: 1, wins: won ? 1 : 0 },
+            $set: { firstName: p.username, username: p.tgUsername || '' }
+          },
+          { upsert: true }
+        );
+
+        // Save individual result for time-based leaderboards
+        await getHangmanResultModel().create({
+          groupId: chatId.toString(),
+          userId: pId,
+          points: pts,
+          won: won,
+          firstName: p.username,
+          username: p.tgUsername || ''
+        });
+      }
+    } catch (e) {
+      console.error("Error saving hangman score:", e);
+    }
+  }
+
+
   // --- COMMANDS ---
   bot.onText(/^\/newhang/, (msg) => {
     const chatId = msg.chat.id;
@@ -145,6 +154,7 @@ module.exports = function (bot, options = {}) {
 
     game.players[userId] = {
       username: msg.from.first_name || 'Player',
+      tgUsername: msg.from.username || '',
       wrongGuesses: 0,
       myCorrectGuesses: []
     };
@@ -169,15 +179,6 @@ module.exports = function (bot, options = {}) {
     }
   });
 
-  bot.onText(/^\/hanglead/, (msg) => {
-    const allPlayers = Object.values(leaderboard);
-    if (allPlayers.length === 0) return bot.sendMessage(msg.chat.id, "Empty leaderboard.");
-    allPlayers.sort((a, b) => b.points - a.points);
-    const top10 = allPlayers.slice(0, 10);
-    let text = "🏆 **Hangman Leaderboard** 🏆\n\n";
-    top10.forEach((p, i) => text += `${i + 1}. **${p.username}** - ${p.points}\n`);
-    bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
-  });
 
   // --- MESSAGE HANDLER FOR GUESSES ---
   bot.on('message', (msg) => {
@@ -216,15 +217,13 @@ module.exports = function (bot, options = {}) {
         for (const pId in game.players) {
           const p = game.players[pId];
           const pts = calculatePlayerPoints(p);
-          if (!leaderboard[pId]) leaderboard[pId] = { username: p.username, points: 0 };
-          leaderboard[pId].points += pts;
-          leaderboard[pId].username = p.username;
           results += `**${p.username}**: ${pts} pts\n`;
         }
-        saveLeaderboard();
+        saveGameResults(chatId, game.players, true);
         bot.sendMessage(chatId, results, { parse_mode: 'Markdown' });
         delete gameSessions[chatId];
       } else if (allDefeated) {
+        saveGameResults(chatId, game.players, false);
         bot.sendMessage(chatId, `💀 **Lost!** Word was: \`${game.secretWord}\``, { parse_mode: 'Markdown' });
         delete gameSessions[chatId];
       } else {

@@ -1,11 +1,14 @@
 const fs = require('fs');
 const path = require('path');
 
-module.exports = function (bot, options = {}) {
+module.exports = function (bot, db, options = {}) {
   const CHAIN_DICTIONARY_FILE = options.dictionaryFile || 'dictionary.txt';
   const JOIN_TIME_MS = 60 * 1000;
   const CHAIN_INACTIVITY_MS = 5 * 60 * 1000;
   const MAX_PLAYERS = 4;
+
+  const getWordchainScoreModel = () => db.getWordchainScoreModel();
+  const getWordchainResultModel = () => db.getWordchainResultModel();
 
   let chainDictionary = [];
   let MAX_POSSIBLE_LENGTH = 0;
@@ -36,13 +39,44 @@ module.exports = function (bot, options = {}) {
     }
   }
 
+  async function saveGameResults(chatId, winnerId, allPlayerIds, playerNames) {
+    try {
+      for (const userId of allPlayerIds) {
+        const isWinner = userId === winnerId;
+        const name = playerNames[userId] || 'Player';
+
+        // Update all-time score
+        await getWordchainScoreModel().updateOne(
+          { groupId: chatId.toString(), userId },
+          {
+            $inc: { gamesPlayed: 1, wins: isWinner ? 1 : 0 },
+            $set: { firstName: name }
+          },
+          { upsert: true }
+        );
+
+        // Save individual result for time-based leaderboards
+        await getWordchainResultModel().create({
+          groupId: chatId.toString(),
+          userId,
+          won: isWinner,
+          firstName: name
+        });
+      }
+    } catch (e) {
+      console.error("Error saving wordchain score:", e);
+    }
+  }
+
   function handleChainWin(chatId) {
     const game = chainSessions[chatId];
     if (!game) return;
     clearTimeout(game.turnTimer);
     if (game.players.length === 1) {
-      const winnerName = game.playerNames[game.players[0]];
+      const winnerId = game.players[0];
+      const winnerName = game.playerNames[winnerId];
       bot.sendMessage(chatId, `🏆 **VICTORY!** 🏆\n\n**${winnerName}** is the Word Chain Champion!`);
+      saveGameResults(chatId, winnerId, game.allOriginalPlayers, game.playerNames);
     } else {
       bot.sendMessage(chatId, "Game ended. Not enough players.");
     }
@@ -89,6 +123,7 @@ module.exports = function (bot, options = {}) {
     }, game.currentTurnTimeLimit * 1000);
   }
 
+
   // --- COMMANDS ---
   bot.onText(/^\/newchain/, (msg) => {
     const chatId = msg.chat.id;
@@ -96,6 +131,7 @@ module.exports = function (bot, options = {}) {
     chainSessions[chatId] = {
       state: 'joining',
       players: [],
+      allOriginalPlayers: [],
       playerNames: {},
       usedWords: [],
       lastLetter: '',
@@ -118,6 +154,7 @@ module.exports = function (bot, options = {}) {
     if (game.players.length >= MAX_PLAYERS) return bot.sendMessage(chatId, "Full.");
 
     game.players.push(userId);
+    game.allOriginalPlayers.push(userId);
     game.playerNames[userId] = msg.from.first_name || 'Player';
     bot.sendMessage(chatId, `✅ **${msg.from.first_name}** joined! (${game.players.length}/${MAX_PLAYERS})`);
   });
@@ -140,6 +177,7 @@ module.exports = function (bot, options = {}) {
       bot.sendMessage(msg.chat.id, "Game ended.");
     }
   });
+
 
   // --- MESSAGE HANDLER ---
   bot.on('message', (msg) => {
@@ -168,7 +206,6 @@ module.exports = function (bot, options = {}) {
 
   return {
     startChain: (chatId) => {
-      // Logic to trigger /newchain manually or via internal call
       bot.sendMessage(chatId, "🎮 Starting a new Word Chain game!");
     }
   };

@@ -57,6 +57,10 @@ module.exports = function (bot, deps) {
             return deps.quiz.handleLeaderboardCallback(query);
         }
 
+        if (data.startsWith('lb_')) {
+            return deps.gameLeaderboard.handleLeaderboardCallback(query);
+        }
+
         if (data.startsWith('setting_') || data === 'confirm_delete_profile' || data.startsWith('like_') || data.startsWith('next_')) {
             return deps.dating.handleDatingCallback(query);
         }

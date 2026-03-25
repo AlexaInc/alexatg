@@ -201,6 +201,8 @@ const deps = {
   GlobalGroupStats,
   get CustomQuizModel() { return db.getCustomQuizModel(); },
   get UserQuizScoreModel() { return db.getUserQuizScoreModel(); },
+  get DatingProfileModel() { return db.getDatingProfileModel(); },
+  get DatingLikeModel() { return db.getDatingLikeModel(); },
   groupChatIds: loadGroupIds(),
   userChatIds: loadUserIds(),
   saveGroupIds,
@@ -213,12 +215,13 @@ const deps = {
   getContactKeyboard: () => contactKeyboard,
   get BOT_ID() { return BOT_ID; },
   get BOT_USERNAME() { return BOT_USERNAME; },
-  stopBots
+  stopBots,
+  db
 };
 
 // --- MODULES ---
-deps.hangman = require('./modules/hangman')(bot, { leaderboardFile: 'leaderboard.json', wordsFile: 'words.txt' });
-deps.wordchain = require('./modules/wordchain')(bot, { dictionaryFile: 'dictionary.txt' });
+deps.hangman = require('./modules/hangman')(bot, db, { wordsFile: 'words.txt' });
+deps.wordchain = require('./modules/wordchain')(bot, db, { dictionaryFile: 'dictionary.txt' });
 const quizModule = require('./modules/quiz')(bot, db);
 deps.quiz = quizModule;
 deps.startQuiz = quizModule.startQuiz; // Backward compatibility

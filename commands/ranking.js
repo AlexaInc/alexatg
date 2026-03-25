@@ -1,4 +1,4 @@
-const { formatLeaderboard, formatProfile, formatNumber, escapeMarkdown } = require('../utils/ui_ranking');
+const { formatLeaderboard, formatProfile, formatNumber, escapeHTML } = require('../utils/ui_ranking');
 const moment = require('moment-timezone');
 
 module.exports = function (bot, deps) {
@@ -36,7 +36,7 @@ module.exports = function (bot, deps) {
         const items = await Activity.find(filter).sort({ [`messages.${period}`]: -1 }).limit(10);
         const title = "RANKING";
         const text = formatLeaderboard(title, items, 'user', null, period);
-        bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown', reply_markup: getKeyboard('rank_local', period) });
+        bot.sendMessage(msg.chat.id, text, { parse_mode: 'HTML', reply_markup: getKeyboard('rank_local', period) });
     };
 
     const handleTopUsers = async (msg, period = 'overall') => {
@@ -45,7 +45,7 @@ module.exports = function (bot, deps) {
         const totalAgg = await GlobalUserStats.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: `$messages.${period}` } } }]);
         const total = totalAgg[0] ? totalAgg[0].total : 0;
         const text = formatLeaderboard("GLOBAL LEADERBOARD", items, 'user', total, period);
-        bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown', reply_markup: getKeyboard('rank_global', period) });
+        bot.sendMessage(msg.chat.id, text, { parse_mode: 'HTML', reply_markup: getKeyboard('rank_global', period) });
     };
 
     const handleTopGroups = async (msg, period = 'overall') => {
@@ -54,7 +54,7 @@ module.exports = function (bot, deps) {
         const totalAgg = await GlobalGroupStats.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: `$messages.${period}` } } }]);
         const total = totalAgg[0] ? totalAgg[0].total : 0;
         const text = formatLeaderboard("TOP GROUPS", items, 'group', total, period);
-        bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown', reply_markup: getKeyboard('rank_groups', period) });
+        bot.sendMessage(msg.chat.id, text, { parse_mode: 'HTML', reply_markup: getKeyboard('rank_groups', period) });
     };
 
     const handleProfile = async (msg) => {
@@ -79,20 +79,19 @@ module.exports = function (bot, deps) {
         const totalGroups = await GlobalGroupStats.countDocuments({});
 
         const text = formatProfile(stats, local, globalPos, localPos, totalUsers, totalGroups);
-        const escapedName = escapeMarkdown(msg.from.first_name);
-        // Add a nice header with the escaped name
-        const profileText = `👤 *PROFILE | ${escapedName.toUpperCase()}*\n` + text.replace('👤 *YOUR PROFILE*\n', '');
+        const profileName = escapeHTML(msg.from.first_name);
+        const profileText = `👤 <b>PROFILE | ${profileName.toUpperCase()}</b>\n` + text.replace('👤 <b>YOUR PROFILE</b>\n', '');
 
-        bot.sendMessage(msg.chat.id, profileText, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, profileText, { parse_mode: 'HTML' });
     };
 
     const handleMyTop = async (msg, period = 'overall') => {
         const userId = msg.from.id.toString();
         const filter = { userId, ...getDateFilter('lastMessageAt', period) };
         const items = await Activity.find(filter).sort({ [`messages.${period}`]: -1 }).limit(10);
-        const escapedName = escapeMarkdown(msg.from.first_name);
-        const text = formatLeaderboard(`MY TOP GROUPS | ${escapedName}`, items, 'group', null, period);
-        bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown', reply_markup: getKeyboard('rank_mytop', period) });
+        const name = escapeHTML(msg.from.first_name);
+        const text = formatLeaderboard(`MY TOP GROUPS | ${name}`, items, 'group', null, period);
+        bot.sendMessage(msg.chat.id, text, { parse_mode: 'HTML', reply_markup: getKeyboard('rank_mytop', period) });
     };
 
     const handleGroupStats = async (msg) => {
@@ -104,22 +103,22 @@ module.exports = function (bot, deps) {
         const globalPosToday = await GlobalGroupStats.countDocuments({ 'messages.today': { $gt: group.messages.today } }) + 1;
         const globalPosWeek = await GlobalGroupStats.countDocuments({ 'messages.week': { $gt: group.messages.week } }) + 1;
 
-        let text = `📊 *STATS FOR ${escapeMarkdown(group.title)}*\n`;
+        let text = `📊 <b>STATS FOR ${escapeHTML(group.title)}</b>\n`;
         text += `👥 ChatFight detects ${group.userCount} users in this group.\n\n`;
 
-        text += `➖ *Overall stats*\n`;
+        text += `➖ <b>Overall stats</b>\n`;
         text += `🏆 Global Position: ${globalPos}°\n`;
         text += `📤 Messages Sent: ${group.messages.overall}\n\n`;
 
-        text += `➖ *Today's stats*\n`;
+        text += `➖ <b>Today's stats</b>\n`;
         text += `🏆 Global Position: ${globalPosToday}°\n`;
         text += `📤 Messages Sent: ${group.messages.today}\n\n`;
 
-        text += `➖ *This week's stats*\n`;
+        text += `➖ <b>This week's stats</b>\n`;
         text += `🏆 Global Position: ${globalPosWeek}°\n`;
         text += `📤 Messages Sent: ${group.messages.week}\n`;
 
-        bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, text, { parse_mode: 'HTML' });
     };
 
     // Callback Handler
@@ -156,18 +155,10 @@ module.exports = function (bot, deps) {
         bot.editMessageText(text, {
             chat_id: chatId,
             message_id: messageId,
-            parse_mode: 'Markdown',
+            parse_mode: 'HTML',
             reply_markup: getKeyboard(prefix + '_' + type, period)
         }).catch(err => {
             console.error("Error editing ranking message:", err.message);
-            if (err.message.includes("can't parse entities")) {
-                // Fallback to plain text if Markdown fails
-                bot.editMessageText(text.replace(/[*_`\[\]()]/g, ''), {
-                    chat_id: chatId,
-                    message_id: messageId,
-                    reply_markup: getKeyboard(prefix + '_' + type, period)
-                }).catch(() => { });
-            }
         });
     };
 

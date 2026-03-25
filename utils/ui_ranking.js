@@ -9,9 +9,9 @@ function formatOrdinal(n) {
     return n + "°";
 }
 
-function escapeMarkdown(text) {
+function escapeHTML(text) {
     if (!text) return "";
-    return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function generateProgressBar(current, target) {
@@ -24,13 +24,13 @@ function generateProgressBar(current, target) {
 function formatProfile(stats, local, globalPos, localPos, totalUsers, totalGroups) {
     const { currentLeague, nextLeague } = getLeagueInfo(stats.messages.overall);
 
-    let text = `👤 *YOUR PROFILE*\n`;
+    let text = `👤 <b>YOUR PROFILE</b>\n`;
     text += ` • Messages sent here: ${formatNumber(local.messages.overall)} (today: ${local.messages.today}, this week: ${local.messages.week})\n`;
     text += ` • Messages sent globally: ${formatNumber(stats.messages.overall)} (today: ${stats.messages.today}, this week: ${stats.messages.week})\n`;
     text += ` • Position here: ${formatOrdinal(localPos.overall)} on ${formatNumber(totalUsers)} (today: ${formatOrdinal(localPos.today)}, this week: ${formatOrdinal(localPos.week)})\n`;
     text += ` • Global position: ${formatOrdinal(globalPos.overall)} on ~${formatNumber(totalGroups * 1000)} (today: ${formatOrdinal(globalPos.today)}, this week: ${formatOrdinal(globalPos.week)})\n\n`;
 
-    text += `🥇*${currentLeague.name}*\n`;
+    text += `🥇<b>${escapeHTML(currentLeague.name)}</b>\n`;
     if (nextLeague) {
         const diff = nextLeague.threshold - stats.messages.overall;
         text += `  — ${formatNumber(diff)} messages to the next league\n`;
@@ -40,16 +40,16 @@ function formatProfile(stats, local, globalPos, localPos, totalUsers, totalGroup
 }
 
 function formatLeaderboard(title, items, type, totalMessages, period) {
-    let text = `📈 *${title} | ${period.toUpperCase()}*\n`;
+    let text = `📈 <b>${escapeHTML(title)} | ${period.toUpperCase()}</b>\n`;
     items.forEach((item, index) => {
         let name = item.username || item.title || item.chatTitle || "Unknown";
         if (type === 'group' && item.chatTitle) name = item.chatTitle;
 
         const count = item.messages ? (item.messages[period] || 0) : 0;
-        let nameDisplay = escapeMarkdown(name);
+        let nameDisplay = escapeHTML(name);
 
         if (type === 'user' && item.userId) {
-            nameDisplay = `[${nameDisplay}](tg://user?id=${item.userId})`;
+            nameDisplay = `<a href="tg://user?id=${item.userId}">${nameDisplay}</a>`;
         }
 
         text += `${index + 1}. ${statusIcon(index, type)} ${nameDisplay} • ${formatNumber(count)}\n`;
@@ -75,5 +75,5 @@ module.exports = {
     formatOrdinal,
     formatProfile,
     formatLeaderboard,
-    escapeMarkdown
+    escapeHTML
 };

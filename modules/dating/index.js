@@ -1,10 +1,10 @@
 module.exports = function (bot, deps) {
-    const { DatingProfileModel, DatingLikeModel, userRegistrationState } = deps;
+    const { userRegistrationState } = deps;
 
     async function findPotentialMatch(userId, userLat, userLon, maxKm, minAge, maxAge, seekingGender) {
         try {
-            const Profile = DatingProfileModel;
-            const Like = DatingLikeModel;
+            const Profile = deps.DatingProfileModel;
+            const Like = deps.DatingLikeModel;
 
             if (!Profile || !Like) {
                 console.error("Dating Module: Models not initialized. Check DATING_MONGO_URI.");
@@ -39,7 +39,7 @@ module.exports = function (bot, deps) {
         const chatId = msg.chat.id.toString();
         if (msg.chat.type !== 'private') return bot.sendMessage(chatId, 'The dating feature only works in private chats.');
 
-        const Profile = DatingProfileModel;
+        const Profile = deps.DatingProfileModel;
         if (!Profile) return bot.sendMessage(chatId, "❌ Dating database not configured.");
 
         try {
@@ -70,7 +70,7 @@ module.exports = function (bot, deps) {
         const chatId = msg.chat.id.toString();
         if (msg.chat.type !== 'private') return;
 
-        const Profile = DatingProfileModel;
+        const Profile = deps.DatingProfileModel;
         if (!Profile) return bot.sendMessage(chatId, "❌ Dating database not configured.");
 
         try {
@@ -102,7 +102,7 @@ module.exports = function (bot, deps) {
         const chatId = msg.chat.id.toString();
         if (msg.chat.type !== 'private') return bot.sendMessage(chatId, 'The dating feature only works in private chats.');
 
-        const Profile = DatingProfileModel;
+        const Profile = deps.DatingProfileModel;
         if (!Profile) return bot.sendMessage(chatId, "❌ Dating database not configured.");
 
         try {
@@ -151,8 +151,8 @@ module.exports = function (bot, deps) {
         const userId = query.from.id.toString();
         const messageId = query.message.message_id;
 
-        const Profile = DatingProfileModel;
-        const Like = DatingLikeModel;
+        const Profile = deps.DatingProfileModel;
+        const Like = deps.DatingLikeModel;
 
         if (data.startsWith('like_') || data.startsWith('next_')) {
             const [action, targetId] = data.split('_');
@@ -188,8 +188,6 @@ module.exports = function (bot, deps) {
                     }
                 } catch (err) { console.error(err); }
             } else {
-                // For 'next', we also record interaction so they don't see them again soon
-                // Or just edit UI
                 bot.editMessageCaption('Next profile...', { chat_id: chatId, message_id: messageId });
             }
             return bot.answerCallbackQuery(query.id);
@@ -257,7 +255,7 @@ module.exports = function (bot, deps) {
 
             if (!userState) return false;
 
-            const Profile = DatingProfileModel;
+            const Profile = deps.DatingProfileModel;
             if (!Profile) return false;
 
             // Handle simple text updates or state transitions

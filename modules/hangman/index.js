@@ -123,12 +123,7 @@ module.exports = function (bot, db, options = {}) {
   }
 
 
-  // --- COMMANDS ---
-  bot.onText(/^\/newhang/, (msg) => {
-    const chatId = msg.chat.id;
-    if (msg.chat.type === 'private') {
-      return bot.sendMessage(chatId, "Groups only.");
-    }
+  function initHangmanGame(chatId) {
     if (gameSessions[chatId]) {
       return bot.sendMessage(chatId, "Game running. /joinhang or /endhang.");
     }
@@ -136,13 +131,14 @@ module.exports = function (bot, db, options = {}) {
       secretWord: getNewWord(),
       allGuessedLetters: [],
       state: 'joining',
-      creatorId: msg.from.id,
+      creatorId: null, // We don't have msg here, or we can pass userId if needed
       players: {},
       lastActivityTime: null
     };
     bot.sendMessage(chatId, `🎉 **New Hangman Game!** 🎉\n/joinhang to enter. /starthang to begin.`, { parse_mode: 'Markdown' });
-  });
+  }
 
+  // --- COMMANDS ---
   bot.onText(/^\/joinhang/, (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
@@ -158,7 +154,7 @@ module.exports = function (bot, db, options = {}) {
       wrongGuesses: 0,
       myCorrectGuesses: []
     };
-    bot.sendMessage(chatId, `✅ **${msg.from.first_name}** joined!`);
+    bot.sendMessage(chatId, `✅ **${msg.from.first_name}** joined!`, { parse_mode: 'Markdown' });
   });
 
   bot.onText(/^\/starthang/, (msg) => {
@@ -234,7 +230,7 @@ module.exports = function (bot, db, options = {}) {
 
   return {
     startHangman: (chatId) => {
-      bot.sendMessage(chatId, "Please use `/newhang` to start a new Hangman game!");
+      initHangmanGame(chatId);
     }
   };
 };

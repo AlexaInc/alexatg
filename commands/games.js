@@ -7,6 +7,14 @@ module.exports = function (bot, deps) {
         bot.sendMessage(msg.chat.id, "Please use `/newhang` to start a new Hangman game!", { parse_mode: 'Markdown' });
     });
 
+    // --- /newhang Trigger ---
+    bot.onText(/^\/newhang(?:\s|$|@)/, (msg) => {
+        if (!deps.handlers.checkCommand(msg, '/newhang', deps.BOT_USERNAME)) return;
+        if (deps.hangman && deps.hangman.startHangman) {
+            deps.hangman.startHangman(msg.chat.id);
+        }
+    });
+
     // --- /newchain Trigger ---
     bot.onText(/^\/newchain(?:\s|$|@)/, (msg) => {
         if (!deps.handlers.checkCommand(msg, '/newchain', deps.BOT_USERNAME)) return;

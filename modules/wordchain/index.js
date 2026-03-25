@@ -75,7 +75,7 @@ module.exports = function (bot, db, options = {}) {
     if (game.players.length === 1) {
       const winnerId = game.players[0];
       const winnerName = game.playerNames[winnerId];
-      bot.sendMessage(chatId, `🏆 **VICTORY!** 🏆\n\n**${winnerName}** is the Word Chain Champion!`);
+      bot.sendMessage(chatId, `🏆 **VICTORY!** 🏆\n\n**${winnerName}** is the Word Chain Champion!`, { parse_mode: 'Markdown' });
       saveGameResults(chatId, winnerId, game.allOriginalPlayers, game.playerNames);
     } else {
       bot.sendMessage(chatId, "Game ended. Not enough players.");
@@ -124,9 +124,7 @@ module.exports = function (bot, db, options = {}) {
   }
 
 
-  // --- COMMANDS ---
-  bot.onText(/^\/newchain/, (msg) => {
-    const chatId = msg.chat.id;
+  function initChainGame(chatId) {
     if (chainSessions[chatId]) return bot.sendMessage(chatId, "Game in progress.");
     chainSessions[chatId] = {
       state: 'joining',
@@ -142,8 +140,9 @@ module.exports = function (bot, db, options = {}) {
       lastActivityTime: Date.now()
     };
     bot.sendMessage(chatId, `🎮 **Word Chain Battle Royale!**\n/joinchain to enter. Creator /startchain to begin.`, { parse_mode: 'Markdown' });
-  });
+  }
 
+  // --- COMMANDS ---
   bot.onText(/^\/joinchain/, (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from.id.toString();
@@ -156,7 +155,7 @@ module.exports = function (bot, db, options = {}) {
     game.players.push(userId);
     game.allOriginalPlayers.push(userId);
     game.playerNames[userId] = msg.from.first_name || 'Player';
-    bot.sendMessage(chatId, `✅ **${msg.from.first_name}** joined! (${game.players.length}/${MAX_PLAYERS})`);
+    bot.sendMessage(chatId, `✅ **${msg.from.first_name}** joined! (${game.players.length}/${MAX_PLAYERS})`, { parse_mode: 'Markdown' });
   });
 
   bot.onText(/^\/startchain/, (msg) => {
@@ -191,7 +190,7 @@ module.exports = function (bot, db, options = {}) {
       if (userId !== currentPlayer) return;
 
       if (text.length < game.currentMinWordLength) return bot.sendMessage(chatId, `⚠️ Too short! Need ${game.currentMinWordLength}+ letters.`);
-      if (text.charAt(0) !== game.lastLetter) return bot.sendMessage(chatId, `❌ Must start with **${game.lastLetter.toUpperCase()}**`);
+      if (text.charAt(0) !== game.lastLetter) return bot.sendMessage(chatId, `❌ Must start with **${game.lastLetter.toUpperCase()}**`, { parse_mode: 'Markdown' });
       if (!chainDictionary.includes(text)) return bot.sendMessage(chatId, `📖 Not in dictionary!`);
       if (game.usedWords.includes(text)) return bot.sendMessage(chatId, `♻️ Already used!`);
 
@@ -206,7 +205,7 @@ module.exports = function (bot, db, options = {}) {
 
   return {
     startChain: (chatId) => {
-      bot.sendMessage(chatId, "🎮 Starting a new Word Chain game!");
+      initChainGame(chatId);
     }
   };
 };

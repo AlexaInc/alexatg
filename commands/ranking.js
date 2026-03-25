@@ -1,9 +1,20 @@
 const { formatLeaderboard, formatProfile, formatNumber, escapeMarkdown } = require('../utils/ui_ranking');
+const moment = require('moment-timezone');
 
 module.exports = function (bot, deps) {
     const { Activity, GlobalUserStats, GlobalGroupStats } = deps;
 
     const periods = ['today', 'week', 'overall'];
+
+    // Returns a date filter for lastMessageAt/lastActiveAt based on period
+    const getDateFilter = (field, period) => {
+        if (period === 'today') {
+            return { [field]: { $gte: moment().startOf('day').toDate() } };
+        } else if (period === 'week') {
+            return { [field]: { $gte: moment().startOf('isoWeek').toDate() } };
+        }
+        return {}; // no filter for 'overall'
+    };
 
     const getKeyboard = (prefix, currentPeriod) => {
         const createBtn = (p) => ({
@@ -21,23 +32,26 @@ module.exports = function (bot, deps) {
 
     const handleRanking = async (msg, period = 'overall') => {
         const chatId = msg.chat.id.toString();
-        const items = await Activity.find({ chatId }).sort({ [`messages.${period}`]: -1 }).limit(10);
+        const filter = { chatId, ...getDateFilter('lastMessageAt', period) };
+        const items = await Activity.find(filter).sort({ [`messages.${period}`]: -1 }).limit(10);
         const title = "RANKING";
         const text = formatLeaderboard(title, items, 'user', null, period);
         bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown', reply_markup: getKeyboard('rank_local', period) });
     };
 
     const handleTopUsers = async (msg, period = 'overall') => {
-        const items = await GlobalUserStats.find().sort({ [`messages.${period}`]: -1 }).limit(10);
-        const totalAgg = await GlobalUserStats.aggregate([{ $group: { _id: null, total: { $sum: `$messages.${period}` } } }]);
+        const filter = getDateFilter('lastActiveAt', period);
+        const items = await GlobalUserStats.find(filter).sort({ [`messages.${period}`]: -1 }).limit(10);
+        const totalAgg = await GlobalUserStats.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: `$messages.${period}` } } }]);
         const total = totalAgg[0] ? totalAgg[0].total : 0;
         const text = formatLeaderboard("GLOBAL LEADERBOARD", items, 'user', total, period);
         bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown', reply_markup: getKeyboard('rank_global', period) });
     };
 
     const handleTopGroups = async (msg, period = 'overall') => {
-        const items = await GlobalGroupStats.find().sort({ [`messages.${period}`]: -1 }).limit(10);
-        const totalAgg = await GlobalGroupStats.aggregate([{ $group: { _id: null, total: { $sum: `$messages.${period}` } } }]);
+        const filter = getDateFilter('lastActiveAt', period);
+        const items = await GlobalGroupStats.find(filter).sort({ [`messages.${period}`]: -1 }).limit(10);
+        const totalAgg = await GlobalGroupStats.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: `$messages.${period}` } } }]);
         const total = totalAgg[0] ? totalAgg[0].total : 0;
         const text = formatLeaderboard("TOP GROUPS", items, 'group', total, period);
         bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown', reply_markup: getKeyboard('rank_groups', period) });
@@ -74,7 +88,8 @@ module.exports = function (bot, deps) {
 
     const handleMyTop = async (msg, period = 'overall') => {
         const userId = msg.from.id.toString();
-        const items = await Activity.find({ userId }).sort({ [`messages.${period}`]: -1 }).limit(10);
+        const filter = { userId, ...getDateFilter('lastMessageAt', period) };
+        const items = await Activity.find(filter).sort({ [`messages.${period}`]: -1 }).limit(10);
         const escapedName = escapeMarkdown(msg.from.first_name);
         const text = formatLeaderboard(`MY TOP GROUPS | ${escapedName}`, items, 'group', null, period);
         bot.sendMessage(msg.chat.id, text, { parse_mode: 'Markdown', reply_markup: getKeyboard('rank_mytop', period) });
@@ -117,20 +132,24 @@ module.exports = function (bot, deps) {
         const userId = query.from.id.toString();
 
         if (type === 'local') {
-            items = await Activity.find({ chatId }).sort({ [`messages.${period}`]: -1 }).limit(10);
+            const filter = { chatId, ...getDateFilter('lastMessageAt', period) };
+            items = await Activity.find(filter).sort({ [`messages.${period}`]: -1 }).limit(10);
             text = formatLeaderboard("RANKING", items, 'user', null, period);
         } else if (type === 'global') {
-            items = await GlobalUserStats.find().sort({ [`messages.${period}`]: -1 }).limit(10);
-            const totalAgg = await GlobalUserStats.aggregate([{ $group: { _id: null, total: { $sum: `$messages.${period}` } } }]);
+            const filter = getDateFilter('lastActiveAt', period);
+            items = await GlobalUserStats.find(filter).sort({ [`messages.${period}`]: -1 }).limit(10);
+            const totalAgg = await GlobalUserStats.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: `$messages.${period}` } } }]);
             total = totalAgg[0] ? totalAgg[0].total : 0;
             text = formatLeaderboard("GLOBAL LEADERBOARD", items, 'user', total, period);
         } else if (type === 'groups') {
-            items = await GlobalGroupStats.find().sort({ [`messages.${period}`]: -1 }).limit(10);
-            const totalAgg = await GlobalGroupStats.aggregate([{ $group: { _id: null, total: { $sum: `$messages.${period}` } } }]);
+            const filter = getDateFilter('lastActiveAt', period);
+            items = await GlobalGroupStats.find(filter).sort({ [`messages.${period}`]: -1 }).limit(10);
+            const totalAgg = await GlobalGroupStats.aggregate([{ $match: filter }, { $group: { _id: null, total: { $sum: `$messages.${period}` } } }]);
             total = totalAgg[0] ? totalAgg[0].total : 0;
             text = formatLeaderboard("TOP GROUPS", items, 'group', total, period);
         } else if (type === 'mytop') {
-            items = await Activity.find({ userId }).sort({ [`messages.${period}`]: -1 }).limit(10);
+            const filter = { userId, ...getDateFilter('lastMessageAt', period) };
+            items = await Activity.find(filter).sort({ [`messages.${period}`]: -1 }).limit(10);
             text = formatLeaderboard(`MY TOP GROUPS | ${query.from.first_name}`, items, 'group', null, period);
         }
 

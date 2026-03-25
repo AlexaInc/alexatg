@@ -61,10 +61,14 @@ async function connectToDatabases() {
     }
 
     if (DATING_MONGO_URI) {
-      datingDb = mongoose.createConnection(DATING_MONGO_URI);
+      datingDb = mongoose.createConnection(DATING_MONGO_URI, {
+        serverSelectionTimeoutMS: 5000, // Fail faster if cluster unreachable
+      });
 
       datingDb.on("connected", () => console.log("✅ Dating MongoDB Connected"));
-      datingDb.on("error", (err) => console.error("❌ Dating MongoDB Connection Error:", err));
+      datingDb.on("error", (err) => {
+        console.error("❌ Dating MongoDB Connection Error:", err.message || err);
+      });
 
       DatingProfileModel = datingDb.model("DatingProfile", DatingProfileSchema);
       DatingLikeModel = datingDb.model("DatingLike", DatingLikeSchema);

@@ -62,7 +62,9 @@ async function connectToDatabases() {
 
     if (DATING_MONGO_URI) {
       datingDb = mongoose.createConnection(DATING_MONGO_URI, {
-        serverSelectionTimeoutMS: 5000, // Fail faster if cluster unreachable
+        serverSelectionTimeoutMS: 5000,
+        family: 4, // Force IPv4
+        tlsAllowInvalidCertificates: true // Bypass some SSL handshake issues
       });
 
       datingDb.on("connected", () => console.log("✅ Dating MongoDB Connected"));

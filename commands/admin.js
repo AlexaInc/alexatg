@@ -312,15 +312,15 @@ module.exports = function (bot, deps) {
   });
 
   // --- /quiz Trigger (Quiz) ---
-  bot.onText(/^\/quiz(?:\s|$|@)/, async (msg, match) => {
+  bot.onText(/^\/quiz(?:\s+([^\s@]+))?(?:\s|$|@)/, async (msg, match) => {
     if (!deps.handlers.checkCommand(msg, '/quiz', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     const userId = msg.from.id;
     const quizId = match[1];
 
     try {
-      const caller = await bot.getChatMember(chatId, userId);
       const isOwner = botOWNER_IDS.includes(userId);
+      const caller = await bot.getChatMember(chatId, userId);
       const canManageQuiz = caller.status === 'creator' || caller.can_change_info || isOwner;
 
       if (!canManageQuiz) {
@@ -334,12 +334,11 @@ module.exports = function (bot, deps) {
         if (!quizData) return bot.sendMessage(chatId, "❌ Quiz ID not found.");
         deps.quiz.startQuiz(chatId, quizData);
       } else {
-        // Start default quiz
-        deps.quiz.startQuiz(chatId);
+        bot.sendMessage(chatId, "⚠️ Usage: `/quiz {id}`. Provide a valid quiz ID to start.", { parse_mode: 'Markdown' });
       }
     } catch (err) {
-      console.error("Quiz perm error:", err);
-      bot.sendMessage(chatId, "❌ This command is restricted to admins with 'Change Group Info' permission.");
+      console.error("Quiz command error:", err);
+      bot.sendMessage(chatId, "❌ An error occurred while starting the quiz.");
     }
   });
 

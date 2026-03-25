@@ -14,22 +14,15 @@ module.exports = function (bot, db) {
       return;
     }
 
-    let questions;
-    if (customQuizData) {
-      questions = customQuizData.questions;
-    } else {
-      try {
-        const res = await fetch(QUIZ_URL);
-        questions = await res.json();
-      } catch (err) {
-        bot.sendMessage(chatId, "❌ Failed to load quiz questions.");
-        return;
-      }
+    if (!customQuizData || !customQuizData.questions || !customQuizData.questions.length) {
+      bot.sendMessage(chatId, "❌ Failed to load quiz questions. (No data provided or ID invalid)");
+      return;
     }
 
-    const quizTitle = customQuizData ? customQuizData.title : "General Knowledge";
-    const quizDesc = customQuizData ? (customQuizData.description || '') : '';
-    const openPeriod = customQuizData ? (customQuizData.openPeriod || 20) : 20;
+    const questions = customQuizData.questions;
+    const quizTitle = customQuizData.title || "Custom Quiz";
+    const quizDesc = customQuizData.description || '';
+    const openPeriod = customQuizData.openPeriod || 20;
 
     quizSessions[chatId] = {
       questions,

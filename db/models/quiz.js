@@ -10,7 +10,9 @@ const CustomQuizSchema = new mongoose.Schema({
     question: String,
     options: [String],
     answer: Number, // 0-indexed correct option
-    explanation: String
+    explanation: String,
+    media: String, // file_id or url
+    mediaType: String // 'photo', 'video', 'animation'
   }],
   createdAt: { type: Date, default: Date.now }
 });

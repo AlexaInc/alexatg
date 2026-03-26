@@ -99,6 +99,65 @@ bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const session = userSessions[chatId];
 
+  // ── Collect media (photos, videos, gifs) ──
+  const isCollecting = session && (session.step === 'collecting_polls' || session.step?.startsWith('qu_mod_') || session.step?.startsWith('q_mod_'));
+  if (isCollecting && (msg.photo || msg.video || msg.animation)) {
+    let fileId;
+    let mediaType;
+    if (msg.photo) {
+      fileId = msg.photo[msg.photo.length - 1].file_id;
+      mediaType = 'photo';
+    } else if (msg.video) {
+      fileId = msg.video.file_id;
+      mediaType = 'video';
+    } else if (msg.animation) {
+      fileId = msg.animation.file_id;
+      mediaType = 'animation';
+    }
+
+    try {
+      const fileUrl = await bot.getFileLink(fileId);
+      session.pendingMedia = fileUrl;
+      session.pendingMediaType = mediaType;
+
+      if (session.step === 'qu_mod_media') {
+        const { quizId, qIdx, page } = session;
+        const quiz = await CustomQuizModel.findOne({ quizId });
+        quiz.questions[qIdx].media = fileUrl;
+        quiz.questions[qIdx].mediaType = mediaType;
+        await quiz.save();
+        delete userSessions[chatId];
+        bot.sendMessage(chatId, `✅ Media updated for question ${qIdx + 1}.`, {
+          reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `qu_info_${quizId}_${qIdx}_${page}` }]] }
+        });
+        return;
+      } else if (session.step === 'q_mod_media') {
+        const q = session.pendingPoll;
+        q.media = fileUrl;
+        q.mediaType = mediaType;
+        session.step = 'collecting_polls';
+        bot.sendMessage(chatId, `✅ *Media attached:* ${mediaType}\n\nReview your question below.`, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: "📝 Edit Question Text", callback_data: `q_mod_text` }],
+              [{ text: "📖 Edit Explanation", callback_data: `q_mod_exp` }],
+              [{ text: "✅ Change Correct Answer", callback_data: `q_mod_ans` }],
+              [{ text: "🖼 Change Media", callback_data: `q_mod_media` }],
+              [{ text: "🔙 Save & Back", callback_data: "confirm_last_mod" }]
+            ]
+          }
+        });
+        return;
+      }
+
+      bot.sendMessage(chatId, `✅ *Media attached:* ${mediaType}\n\nNow send the quiz poll for this question.`, { parse_mode: 'Markdown' });
+    } catch (err) {
+      bot.sendMessage(chatId, "❌ Failed to get media link.");
+    }
+    return;
+  }
+
   // ── Collect quiz polls (step: collecting_polls) ──
   if (msg.poll && session && session.step === 'collecting_polls') {
     const poll = msg.poll;
@@ -114,10 +173,16 @@ bot.on('message', async (msg) => {
       question: poll.question,
       options: poll.options.map(o => o.text),
       answer: correctOptionId,
-      explanation: poll.explanation || ""
+      explanation: poll.explanation || "",
+      media: session.pendingMedia || null,
+      mediaType: session.pendingMediaType || null
     };
 
-    const qText = `❓ *Question Confirmation*\n\n*Question:* ${poll.question}\n*Options:* \n${poll.options.map((o, i) => `${i === correctOptionId ? '✅' : '❌'} ${o.text}`).join('\n')}\n${poll.explanation ? `\n📖 *Explanation:* ${poll.explanation}` : ''}`;
+    // Clear pending media after attaching
+    delete session.pendingMedia;
+    delete session.pendingMediaType;
+
+    const qText = `❓ *Question Confirmation*\n\n*Question:* ${poll.question}\n*Options:* \n${poll.options.map((o, i) => `${i === correctOptionId ? '✅' : '❌'} ${o.text}`).join('\n')}\n${poll.explanation ? `\n📖 *Explanation:* ${poll.explanation}` : ''}${session.pendingPoll.media ? `\n🖼 *Media attached:* Yes (${session.pendingPoll.mediaType})` : ''}`;
 
     return bot.sendMessage(chatId, qText, {
       parse_mode: 'Markdown',
@@ -262,6 +327,7 @@ bot.on('message', async (msg) => {
             [{ text: "📝 Edit Question Text", callback_data: `q_mod_text` }],
             [{ text: "📖 Edit Explanation", callback_data: `q_mod_exp` }],
             [{ text: "✅ Change Correct Answer", callback_data: `q_mod_ans` }],
+            [{ text: "🖼 Change Media", callback_data: `q_mod_media` }],
             [{ text: "🔙 Save & Back", callback_data: "confirm_last_mod" }]
           ]
         }
@@ -307,7 +373,7 @@ bot.on('message', async (msg) => {
       delete userSessions[chatId];
       const q = quiz.questions[qIdx];
       const updated = (text === '/skip') ? "🧹 Explanation cleared!" : "✅ Explanation updated!";
-      const qText = `${updated}\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+      const qText = `${updated}\n\n❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}${q.media ? `\n🖼 *Media:* (${q.mediaType})` : ''}`;
       bot.sendMessage(chatId, qText, {
         parse_mode: 'Markdown',
         reply_markup: {
@@ -315,11 +381,29 @@ bot.on('message', async (msg) => {
             [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${quizId}_${qIdx}_${page}` }],
             [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${quizId}_${qIdx}_${page}` }],
             [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${quizId}_${qIdx}_${page}` }],
-            [{ text: "🗑 Delete Question", callback_data: `qu_del_${quizId}_${qIdx}_${page}` }],
+            [{ text: "� Change Media", callback_data: `qu_ed_media_${quizId}_${qIdx}_${page}` }],
+            [{ text: "�🗑 Delete Question", callback_data: `qu_del_${quizId}_${qIdx}_${page}` }],
             [{ text: "🔙 Back", callback_data: `qns_page_${quizId}_${page}` }]
           ]
         }
       });
+      break;
+    }
+
+    case 'qu_mod_media': {
+      const { quizId, qIdx, page } = session;
+      const quiz = await CustomQuizModel.findOne({ quizId });
+      if (text === '/skip') {
+        quiz.questions[qIdx].media = null;
+        quiz.questions[qIdx].mediaType = null;
+        await quiz.save();
+        delete userSessions[chatId];
+        bot.sendMessage(chatId, "✅ Media removed.", {
+          reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `qu_info_${quizId}_${qIdx}_${page}` }]] }
+        });
+      } else {
+        bot.sendMessage(chatId, "❌ Please send a photo, video, or GIF, or send /skip to remove media.");
+      }
       break;
     }
 
@@ -542,7 +626,7 @@ bot.on('callback_query', async (query) => {
     const q = quiz.questions[qIdx];
     if (!q) return bot.answerCallbackQuery(query.id, { text: "❌ Question not found." });
 
-    const qText = `❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+    const qText = `❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}${q.media ? `\n🖼 *Media:* (${q.mediaType})` : ''}`;
 
     await bot.editMessageText(qText, {
       chat_id: chatId,
@@ -553,6 +637,7 @@ bot.on('callback_query', async (query) => {
           [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${qId}_${qIdx}_${page}` }],
           [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${qId}_${qIdx}_${page}` }],
           [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${qId}_${qIdx}_${page}` }],
+          [{ text: "🖼 Change Media", callback_data: `qu_ed_media_${qId}_${qIdx}_${page}` }],
           [{ text: "🗑 Delete Question", callback_data: `qu_del_${qId}_${qIdx}_${page}` }],
           [{ text: "🔙 Back", callback_data: `qns_page_${qId}_${page}` }]
         ]
@@ -563,7 +648,7 @@ bot.on('callback_query', async (query) => {
   // Handle granular question modification callbacks
   if (data.startsWith("qu_ed_")) {
     const parts = data.split("_");
-    const type = parts[2]; // txt, exp, ans
+    const type = parts[2]; // txt, exp, ans, media
     const qId = parts[3];
     const qIdx = parseInt(parts[4], 10);
     const page = parts[5];
@@ -574,6 +659,9 @@ bot.on('callback_query', async (query) => {
     } else if (type === "exp") {
       userSessions[chatId] = { step: 'qu_mod_exp', quizId: qId, qIdx, page };
       await bot.sendMessage(chatId, "Enter new explanation (or send /skip to cancel):");
+    } else if (type === "media") {
+      userSessions[chatId] = { step: 'qu_mod_media', quizId: qId, qIdx, page };
+      await bot.sendMessage(chatId, "Send a new photo, video, or GIF (or send /skip to remove current media):");
     } else if (type === "ans") {
       const quiz = await CustomQuizModel.findOne({ quizId: qId });
       const q = quiz.questions[qIdx];
@@ -597,7 +685,7 @@ bot.on('callback_query', async (query) => {
     await bot.answerCallbackQuery(query.id, { text: "✅ Answer updated." });
     // Reload info view
     const q = quiz.questions[qIdx];
-    const qText = `❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}`;
+    const qText = `❓ *Question Details* [${qIdx + 1}]\n\n*Q:* ${q.question}\n*Ans:* ${q.options[q.answer]}\n${q.explanation ? `*Exp:* ${q.explanation}` : ''}${q.media ? `\n🖼 *Media:* (${q.mediaType})` : ''}`;
     await bot.editMessageText(qText, {
       chat_id: chatId,
       message_id: messageId,
@@ -607,6 +695,7 @@ bot.on('callback_query', async (query) => {
           [{ text: "📝 Edit Text", callback_data: `qu_ed_txt_${qId}_${qIdx}_${page}` }],
           [{ text: "📖 Edit Explanation", callback_data: `qu_ed_exp_${qId}_${qIdx}_${page}` }],
           [{ text: "✅ Change Answer", callback_data: `qu_ed_ans_${qId}_${qIdx}_${page}` }],
+          [{ text: "🖼 Change Media", callback_data: `qu_ed_media_${qId}_${qIdx}_${page}` }],
           [{ text: "🗑 Delete Question", callback_data: `qu_del_${qId}_${qIdx}_${page}` }],
           [{ text: "🔙 Back", callback_data: `qns_page_${qId}_${page}` }]
         ]

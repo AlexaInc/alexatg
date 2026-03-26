@@ -160,12 +160,28 @@ module.exports = function (bot, db) {
     const q = session.questions[session.currentQ];
     const openPeriod = session.openPeriod || 20;
     try {
+      let mediaMsg = null;
+      if (q.media) {
+        try {
+          if (q.mediaType === 'photo') {
+            mediaMsg = await bot.sendPhoto(chatId, q.media);
+          } else if (q.mediaType === 'video') {
+            mediaMsg = await bot.sendVideo(chatId, q.media);
+          } else if (q.mediaType === 'animation') {
+            mediaMsg = await bot.sendAnimation(chatId, q.media);
+          }
+        } catch (err) {
+          console.error("Failed to send quiz media:", err.message);
+        }
+      }
+
       const poll = await bot.sendPoll(chatId, q.question, q.options, {
         type: "quiz",
         correct_option_id: q.answer,
         is_anonymous: false,
         open_period: openPeriod,
-        explanation: q.explanation || ""
+        explanation: q.explanation || "",
+        reply_to_message_id: mediaMsg ? mediaMsg.message_id : null
       });
       session.currentPollId = poll.poll.id;
 
@@ -175,7 +191,9 @@ module.exports = function (bot, db) {
           sendNextQuestion(chatId);
         }
       }, (openPeriod + 1) * 1000); // +1s buffer after poll closes
-    } catch (err) { }
+    } catch (err) {
+      console.error("Quiz Poll Execution Error:", err);
+    }
   }
 
   bot.on("poll_answer", async (answer) => {

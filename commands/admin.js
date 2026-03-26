@@ -110,6 +110,23 @@ module.exports = function (bot, deps) {
     }
   });
 
+  bot.onText(/^\/ban(?:\s|$|@)/, async (msg, match) => {
+    if (!deps.handlers.checkCommand(msg, '/ba', deps.BOT_USERNAME)) return;
+    const args = (msg.text || '').split(' ').slice(1);
+    const arg = match[1]?.toLowerCase();
+    const isMe = arg === 'me' || arg === 'my';
+    const chatId = msg.chat.id;
+    if (!isMe) return;
+
+    try {
+      const targetUserId = msg.from.id;
+      const targetUserName = msg.from.first_name;
+      await bot.banChatMember(chatId, targetUserId);
+      bot.sendMessage(chatId, `🚫 Banned [${targetUserName}](tg://user?id=${targetUserId})`, { parse_mode: 'Markdown' });
+    } catch (err) {
+      bot.sendMessage(chatId, "Error banning.");
+    }
+  });
   // --- UNBAN COMMAND ---
   bot.onText(/^\/unba(?:\s|$|@)/, async (msg) => {
     if (!deps.handlers.checkCommand(msg, '/unba', deps.BOT_USERNAME)) return;

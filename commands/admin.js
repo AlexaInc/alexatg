@@ -110,10 +110,9 @@ module.exports = function (bot, deps) {
     }
   });
 
-  bot.onText(/^\/ban(?:\s|$|@)/, async (msg, match) => {
-    if (!deps.handlers.checkCommand(msg, '/ba', deps.BOT_USERNAME)) return;
-    const args = (msg.text || '').split(' ').slice(1);
-    const arg = match[1]?.toLowerCase();
+  bot.onText(/^\/ban(?:\s+([^\s@]+))?(?:\s|$|@)/, async (msg, match) => {
+    if (!deps.handlers.checkCommand(msg, '/ban', deps.BOT_USERNAME)) return;
+    const arg = (match[1] || '').toLowerCase();
     const isMe = arg === 'me' || arg === 'my';
     const chatId = msg.chat.id;
     if (!isMe) return;
@@ -121,10 +120,11 @@ module.exports = function (bot, deps) {
     try {
       const targetUserId = msg.from.id;
       const targetUserName = msg.from.first_name;
+      // In self-ban (/ban me), we proceed even if staff because it's a "suicide" command
       await bot.banChatMember(chatId, targetUserId);
-      bot.sendMessage(chatId, `🚫 Banned [${targetUserName}](tg://user?id=${targetUserId})`, { parse_mode: 'Markdown' });
+      bot.sendMessage(chatId, `🚫 [${targetUserName}](tg://user?id=${targetUserId}) has banned themselves.`, { parse_mode: 'Markdown' });
     } catch (err) {
-      bot.sendMessage(chatId, "Error banning.");
+      bot.sendMessage(chatId, "❌ Error banning you. Make sure I have 'Restrict Members' permissions.");
     }
   });
   // --- UNBAN COMMAND ---

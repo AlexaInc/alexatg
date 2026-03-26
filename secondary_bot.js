@@ -32,7 +32,15 @@ if (typeof mongoose !== 'undefined') {
   console.error('❌ CRITICAL: mongoose is still undefined after attempt to require.');
 }
 
-const bot = new TelegramBot(token, { polling: false });
+const bot = new TelegramBot(token, {
+  polling: false,
+  request: {
+    agentOptions: {
+      keepAlive: true,
+      family: 4
+    }
+  }
+});
 
 const CustomQuizSchema = require('./db/models/quiz');
 const CustomQuizModel = mongoose.model("Quiz", CustomQuizSchema);

@@ -129,7 +129,15 @@ async function createDummyAvatarBuffer(f, l, c, scale = 1) {
     let browser;
     let pngBuffer;
     try {
-        browser = await puppeteer.launch({ headless: true, executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-gpu'] });
+        const launchOptions = {
+            headless: true,
+            args: ['--no-sandbox', '--disable-gpu']
+        };
+        // Add executablePath only if on Linux and it exists
+        if (process.platform === 'linux' && fs.existsSync('/usr/bin/google-chrome')) {
+            launchOptions.executablePath = '/usr/bin/google-chrome';
+        }
+        browser = await puppeteer.launch(launchOptions);
         const page = await browser.newPage();
         await page.setViewport({ width: avatarSize, height: avatarSize });
         await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' }); // Reverted from networkidle0
@@ -167,7 +175,11 @@ async function getEmojiStatusBuffer(emojiId) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             const stickerApiUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getCustomEmojiStickers`;
-            const stickerResponse = await axios.post(stickerApiUrl, { custom_emoji_ids: [emojiId] });
+            const stickerResponse = await axios.post(stickerApiUrl, { custom_emoji_ids: [emojiId] }, {
+                // Force IPv4 to avoid DNS issues with IPv6
+                headers: { 'Connection': 'close' },
+                family: 4
+            });
 
             const stickers = stickerResponse.data.result;
             if (!stickers || stickers.length === 0) throw new Error("Sticker not found for ID.");
@@ -178,11 +190,11 @@ async function getEmojiStatusBuffer(emojiId) {
             const file_id = sticker.thumbnail.file_id;
 
             const fileApiUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getFile`;
-            const fileResponse = await axios.post(fileApiUrl, { file_id: file_id });
+            const fileResponse = await axios.post(fileApiUrl, { file_id: file_id }, { family: 4 });
             const file_path = fileResponse.data.result.file_path;
 
             const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${file_path}`;
-            const imageResponse = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+            const imageResponse = await axios.get(fileUrl, { responseType: 'arraybuffer', family: 4 });
 
             const pngBuffer = await sharp(imageResponse.data).png().toBuffer();
 
@@ -634,7 +646,14 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const VIEWPORT_WIDTH = BODY_PADDING_HORIZONTAL + AVATAR_WIDTH + AVATAR_MARGIN_RIGHT + BUBBLE_TAIL_WIDTH + Math.max(ESTIMATED_MAX_NAME_WIDTH, DEFAULT_MESSAGE_MAX_WIDTH + BUBBLE_PADDING_HORIZONTAL) + (50 * scale); // Add extra buffer
     const VIEWPORT_HEIGHT = 1200 * scale; // Default height, will be cropped later
 
-    const browser = await puppeteer.launch({ headless: true, executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-gpu', '--no-proxy-server'] });
+    const launchOptions = {
+        headless: true,
+        args: ['--no-sandbox', '--disable-gpu', '--no-proxy-server']
+    };
+    if (process.platform === 'linux' && fs.existsSync('/usr/bin/google-chrome')) {
+        launchOptions.executablePath = '/usr/bin/google-chrome';
+    }
+    const browser = await puppeteer.launch(launchOptions);
     const page = await browser.newPage();
     await page.setViewport({ width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT });
     // Wait until dom is loaded (reverted from networkidle0)

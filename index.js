@@ -18,7 +18,7 @@ const helpers = require('./utils/helpers');
 const { loadGroupIds, saveGroupIds, saveUserIds, loadUserIds } = require('./utils/storage');
 const { updateUserCount_Optimized, checkUserCount, updateUserLimit } = require('./utils/aiLimit');
 const db = require('./db/index');
-const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning, BroadcastId, CleanCommand, WelcomeSettings, SpecialUser, Activity, GlobalUserStats, GlobalGroupStats } = db;
+const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, AntilinkWarning, Warning, BroadcastId, CleanCommand, WelcomeSettings, SpecialUser, Activity, GlobalUserStats, GlobalGroupStats, BadWord } = db;
 
 // --- CONFIG ---
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -199,6 +199,7 @@ const deps = {
   Activity,
   GlobalUserStats,
   GlobalGroupStats,
+  BadWord,
   get CustomQuizModel() { return db.getCustomQuizModel(); },
   get UserQuizScoreModel() { return db.getUserQuizScoreModel(); },
   get DatingProfileModel() { return db.getDatingProfileModel(); },

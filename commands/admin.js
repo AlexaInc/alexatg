@@ -1,5 +1,5 @@
 module.exports = function (bot, deps) {
-  const { botOWNER_IDS, UserMap, handlers } = deps;
+  const { botOWNER_IDS, UserMap, handlers, BadWord } = deps;
   const { getTarget, handleAnonymous, escapeHTML } = handlers;
 
   // --- MUTE COMMAND ---
@@ -1505,6 +1505,72 @@ module.exports = function (bot, deps) {
     );
 
     bot.sendMessage(chatId, `⏹ **Clean Command** is now **DISABLED**. Command messages will no longer be deleted.`, { parse_mode: 'Markdown' });
+  });
+
+  // --- BAD WORDS COMMANDS ---
+  bot.onText(/^\/addbadword(?:\s+([^\s@]+))?(?:\s|$|@)/, async (msg, match) => {
+    if (!deps.handlers.checkCommand(msg, '/addbadword', deps.BOT_USERNAME)) return;
+    const chatId = msg.chat.id;
+    const word = match[1];
+    if (!word) return bot.sendMessage(chatId, "⚠️ Usage: `/addbadword <word>`");
+
+    try {
+      const caller = await bot.getChatMember(chatId, msg.from.id).catch(() => ({ status: 'member' }));
+      const isOwner = botOWNER_IDS.includes(msg.from.id);
+      const isAdmin = ["administrator", "creator"].includes(caller.status) || isOwner;
+      if (!isAdmin) return bot.sendMessage(chatId, "❌ Admin only.");
+
+      await BadWord.updateOne(
+        { groupId: String(chatId) },
+        { $addToSet: { words: word.toLowerCase() } },
+        { upsert: true }
+      );
+      bot.sendMessage(chatId, `✅ Added *${word}* to bad words list.`, { parse_mode: 'Markdown' });
+    } catch (err) {
+      console.error(err);
+      bot.sendMessage(chatId, "❌ Error adding bad word.");
+    }
+  });
+
+  bot.onText(/^\/(?:delbadword|rembadword)(?:\s+([^\s@]+))?(?:\s|$|@)/, async (msg, match) => {
+    const isDel = deps.handlers.checkCommand(msg, '/delbadword', deps.BOT_USERNAME);
+    const isRem = deps.handlers.checkCommand(msg, '/rembadword', deps.BOT_USERNAME);
+    if (!isDel && !isRem) return;
+
+    const chatId = msg.chat.id;
+    const word = match[1];
+    if (!word) return bot.sendMessage(chatId, "⚠️ Usage: `/delbadword <word>`");
+
+    try {
+      const caller = await bot.getChatMember(chatId, msg.from.id).catch(() => ({ status: 'member' }));
+      const isOwner = botOWNER_IDS.includes(msg.from.id);
+      const isAdmin = ["administrator", "creator"].includes(caller.status) || isOwner;
+      if (!isAdmin) return bot.sendMessage(chatId, "❌ Admin only.");
+
+      await BadWord.updateOne(
+        { groupId: String(chatId) },
+        { $pull: { words: word.toLowerCase() } }
+      );
+      bot.sendMessage(chatId, `✅ Removed *${word}* from bad words list.`, { parse_mode: 'Markdown' });
+    } catch (err) {
+      console.error(err);
+      bot.sendMessage(chatId, "❌ Error removing bad word.");
+    }
+  });
+
+  bot.onText(/^\/badwords(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/badwords', deps.BOT_USERNAME)) return;
+    const chatId = msg.chat.id;
+    try {
+      const badWordData = await BadWord.findOne({ groupId: String(chatId) });
+      if (!badWordData || !badWordData.words.length) return bot.sendMessage(chatId, "📋 No bad words set in this chat.");
+
+      const words = badWordData.words.map(w => `• ${w}`).join('\n');
+      bot.sendMessage(chatId, `📋 *Bad words in this chat:*\n\n${words}`, { parse_mode: 'Markdown' });
+    } catch (err) {
+      console.error(err);
+      bot.sendMessage(chatId, "❌ Error fetching bad words.");
+    }
   });
 
   // --- CALLBACK HANDLERS ---

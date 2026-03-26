@@ -11,7 +11,8 @@ module.exports = function (bot, deps) {
         botOWNER_IDS,
         Filters,
         handlers,
-        WelcomeSettings
+        WelcomeSettings,
+        BadWord
     } = deps;
     const { getGreeting, escapeHTML } = handlers;
 
@@ -322,6 +323,21 @@ module.exports = function (bot, deps) {
                     }
                 }
             }
+
+            // --- Bad Words Filter ---
+            try {
+                const badWordDoc = await BadWord.findOne({ groupId: String(chatId) });
+                if (badWordDoc && badWordDoc.words.length > 0) {
+                    const hasBadWord = badWordDoc.words.some(word => {
+                        const regex = new RegExp(`\\b${word}\\b`, 'i');
+                        return regex.test(text);
+                    });
+                    if (hasBadWord) {
+                        bot.deleteMessage(chatId, msg.message_id).catch(() => { });
+                        return;
+                    }
+                }
+            } catch (err) { console.error("Badword filter error:", err); }
 
             const clicker = await bot.getChatMember(chatId, userId).catch(() => ({ status: 'member' }));
             const isAdmin = ["administrator", "creator"].includes(clicker.status) || botOWNER_IDS.includes(userId);

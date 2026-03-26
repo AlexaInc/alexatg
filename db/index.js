@@ -23,6 +23,7 @@ const WelcomeSettings = require('./models/welcomeSettings');
 const SpecialUser = require('./models/specialUser');
 const Activity = require('./models/activity');
 const { GlobalUserStats, GlobalGroupStats } = require('./models/globalStats');
+const BadWord = require('./models/badword');
 
 let secondaryDb = null;
 let datingDb = null;
@@ -97,6 +98,7 @@ module.exports = {
   Activity,
   GlobalUserStats,
   GlobalGroupStats,
+  BadWord,
   getCustomQuizModel: () => CustomQuizModel,
   getUserQuizScoreModel: () => UserQuizScoreModel,
   getQuizResultModel: () => QuizResultModel,

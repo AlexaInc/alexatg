@@ -42,8 +42,8 @@ const noPermissions = {
   can_invite_users: false,
   can_pin_messages: false,
 };
-
-const Filters = new FilterManager({ dbPath: './filters' });
+const filterspath = process.env.filterspath || './filters';
+const Filters = new FilterManager({ dbPath: filterspath });
 const activeQuizzes = {};
 const userRegistrationState = {};
 

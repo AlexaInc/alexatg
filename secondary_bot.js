@@ -525,7 +525,7 @@ bot.on('callback_query', async (query) => {
     session.step = 'collecting_polls';
     session.polls = [];
     bot.editMessageText(
-      "📊 *Poll Mode*\n\nSend your Quiz polls one by one.\n_Use Telegram's quiz poll type and mark the correct answer!_\n\nWhen you're done, type /done.",
+      "📊 *Poll Mode*\n\nSend your Quiz polls one by one.\n_Use Telegram's quiz poll type and mark the correct answer!_\n\n if you want to atach media for a qustion send it before poll...\n\nWhen you're done, type /done.",
       {
         chat_id: chatId,
         message_id: query.message.message_id,

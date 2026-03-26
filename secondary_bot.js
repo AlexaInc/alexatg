@@ -153,6 +153,7 @@ bot.on('message', async (msg) => {
 
       bot.sendMessage(chatId, `✅ *Media attached:* ${mediaType}\n\nNow send the quiz poll for this question.`, { parse_mode: 'Markdown' });
     } catch (err) {
+      console.error(err);
       bot.sendMessage(chatId, "❌ Failed to get media link.");
     }
     return;

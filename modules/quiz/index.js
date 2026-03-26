@@ -163,12 +163,21 @@ module.exports = function (bot, db) {
       let mediaMsg = null;
       if (q.media) {
         try {
+          const axios = require('axios');
+          let mediaData = q.media;
+          if (q.media && q.media.startsWith('http')) {
+            const response = await axios.get(q.media, {
+              responseType: 'arraybuffer',
+              timeout: 10000
+            });
+            mediaData = Buffer.from(response.data);
+          }
           if (q.mediaType === 'photo') {
-            mediaMsg = await bot.sendPhoto(chatId, q.media);
+            mediaMsg = await bot.sendPhoto(chatId, mediaData);
           } else if (q.mediaType === 'video') {
-            mediaMsg = await bot.sendVideo(chatId, q.media);
+            mediaMsg = await bot.sendVideo(chatId, mediaData);
           } else if (q.mediaType === 'animation') {
-            mediaMsg = await bot.sendAnimation(chatId, q.media);
+            mediaMsg = await bot.sendAnimation(chatId, mediaData);
           }
         } catch (err) {
           console.error("Failed to send quiz media:", err.message);

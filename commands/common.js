@@ -156,84 +156,148 @@ module.exports = function (bot, deps) {
     if (!deps.handlers.checkCommand(msg, '/q', deps.BOT_USERNAME)) return;
     const chatId = msg.chat.id;
     if (!msg.reply_to_message) {
-      return bot.sendMessage(chatId, "Reply to a message with `/q` to create a quote sticker. Use `/q r` to include the reply context.", { parse_mode: 'Markdown' });
+      return bot.sendMessage(chatId, "Reply to a message with `/q` or `/q [count]` to create a quote sticker. Use `/q r` to include reply context.", { parse_mode: 'Markdown' });
+    }
+
+    const args = msg.text.split(/\s+/).slice(1);
+    let count = 1;
+    let withReply = false;
+    for (const arg of args) {
+      const low = arg.toLowerCase();
+      if (low === 'r') withReply = true;
+      else if (!isNaN(arg)) count = Math.min(20, Math.max(1, parseInt(arg)));
     }
 
     const targetMsg = msg.reply_to_message;
-    const args = msg.text.split(/\s+/).slice(1).map(a => a.toLowerCase());
-    const withReply = args.includes('r');
+    const { getProfilePhoto, downloadImage, getUserbotClient, getJoinedEntity } = deps.handlers;
 
     try {
-      const from = targetMsg.from;
-      const { getProfilePhoto, downloadImage, getUserbotClient, getJoinedEntity } = deps.handlers;
+      let messagesToProcess = [];
 
-      const userPhotourl = await getProfilePhoto(bot, from.id);
-      const userPhoto = userPhotourl ? await downloadImage(userPhotourl) : null;
-      const chat = await bot.getChat(from.id).catch(() => ({}));
-
-      let replymsgUser = null;
-      let replymsgContent = null;
-      let replySenderColor = null;
-
-      if (withReply) {
+      if (count > 1) {
         const client = await getUserbotClient();
         if (client) {
           try {
             const chatEntity = await getJoinedEntity(client, bot, chatId);
-            const messages = await client.getMessages(chatEntity, { ids: [targetMsg.message_id] });
-            const fullTargetMsg = messages[0];
+            const fetched = await client.getMessages(chatEntity, {
+              ids: Array.from({ length: count }, (_, i) => targetMsg.message_id + i)
+            });
 
-            if (fullTargetMsg && fullTargetMsg.replyTo) {
-              const gfId = fullTargetMsg.replyTo.replyToMsgId;
-              const gfMsgs = await client.getMessages(chatEntity, { ids: [gfId] });
-              const gfMsg = gfMsgs[0];
+            for (let i = 0; i < fetched.length; i++) {
+              const m = fetched[i];
+              if (!m || (!m.message && !m.caption)) continue;
 
-              if (gfMsg) {
-                const gfSender = gfMsg.sender;
-                replymsgUser = (gfSender ? (gfSender.firstName || '') + ' ' + (gfSender.lastName || '') : 'Unknown').trim() || 'Deleted User';
-                replymsgContent = gfMsg.message || gfMsg.caption || 'Media';
-                replySenderColor = (gfSender && gfSender.color) ? gfSender.color.colorId : (Math.floor(Math.random() * 7));
+              const sender = m.sender;
+              const senderId = m.senderId?.toString();
+              const photoUrl = senderId ? await getProfilePhoto(bot, senderId) : null;
+              const photo = photoUrl ? await downloadImage(photoUrl) : null;
+
+              // Convert GramJS entities to plain objects
+              const entities = (m.entities || []).map(e => {
+                let type = 'unknown';
+                if (e.className === 'MessageEntityBold') type = 'bold';
+                else if (e.className === 'MessageEntityItalic') type = 'italic';
+                else if (e.className === 'MessageEntityCode') type = 'code';
+                else if (e.className === 'MessageEntityCustomEmoji') type = 'custom_emoji';
+                else if (e.className === 'MessageEntityUrl' || e.className === 'MessageEntityTextUrl') type = 'url';
+                else if (e.className === 'MessageEntityMention') type = 'mention';
+                else if (e.className === 'MessageEntityBotCommand') type = 'bot_command';
+                return { type, offset: e.offset, length: e.length, custom_emoji_id: e.documentId?.toString() };
+              });
+
+              let rUser = null, rText = null, rColor = null;
+              // Add reply context ONLY to the first message if 'r' is present
+              if (i === 0 && withReply && m.replyTo) {
+                const gfMsgs = await client.getMessages(chatEntity, { ids: [m.replyTo.replyToMsgId] });
+                const gf = gfMsgs[0];
+                if (gf) {
+                  const s = gf.sender;
+                  rUser = `${s?.firstName || ''} ${s?.lastName || ''}`.trim() || 'User';
+                  rText = gf.message || gf.caption || 'Media';
+                  rColor = s?.color?.colorId || (Math.floor(Math.random() * 7));
+                }
               }
+
+              messagesToProcess.push({
+                firstName: sender?.firstName || 'User',
+                lastName: sender?.lastName || '',
+                customemojiid: sender?.emojiStatus?.documentId?.toString(),
+                message: m.message || m.caption || ' ',
+                nameColorId: sender?.color?.colorId || 0,
+                inputImageBuffer: photo,
+                replySender: rUser,
+                replyMessage: rText,
+                replysendercolor: rColor,
+                entities
+              });
             }
           } catch (e) {
-            console.warn("Userbot failed to fetch GF message:", e.message);
+            console.error("Multi-quote fetch error:", e);
           } finally {
             await client.disconnect().catch(() => { });
           }
         }
-      } else if (targetMsg.reply_to_message) {
-        // Fallback to bot API if bot happens to have the replied message in cache
-        const rFrom = targetMsg.reply_to_message.from;
-        replymsgUser = `${rFrom.first_name} ${rFrom.last_name || ''}`.trim() || 'Unknown';
-        replymsgContent = targetMsg.reply_to_message.text || targetMsg.reply_to_message.caption || null;
-        const rChat = await bot.getChat(rFrom.id).catch(() => ({}));
-        replySenderColor = rChat.accent_color_id;
       }
 
-      const msgText = String(targetMsg.text || targetMsg.caption || ' ');
-      const msgEntities = targetMsg.entities || targetMsg.caption_entities || [];
+      // If multi-fetch failed or count was 1, fallback to single message
+      if (messagesToProcess.length === 0) {
+        const from = targetMsg.from;
+        const photoUrl = await getProfilePhoto(bot, from.id);
+        const photo = photoUrl ? await downloadImage(photoUrl) : null;
+        const chat = await bot.getChat(from.id).catch(() => ({}));
 
-      const stickerBuffer = await createQuoteSticker(
-        from.first_name || '',
-        from.last_name || '',
-        chat.emoji_status_custom_emoji_id,
-        msgText,
-        chat.accent_color_id,
-        userPhoto,
-        replymsgUser,
-        replymsgContent,
-        replySenderColor,
-        msgEntities
-      );
+        let rUser = null, rText = null, rColor = null;
+        if (withReply) {
+          const client = await getUserbotClient();
+          if (client) {
+            try {
+              const chatEntity = await getJoinedEntity(client, bot, chatId);
+              const msgs = await client.getMessages(chatEntity, { ids: [targetMsg.message_id] });
+              if (msgs[0]?.replyTo) {
+                const gfs = await client.getMessages(chatEntity, { ids: [msgs[0].replyTo.replyToMsgId] });
+                if (gfs[0]) {
+                  const s = gfs[0].sender;
+                  rUser = `${s?.firstName || ''} ${s?.lastName || ''}`.trim() || 'User';
+                  rText = gfs[0].message || gfs[0].caption || 'Media';
+                  rColor = s?.color?.colorId || 0;
+                }
+              }
+            } finally { await client.disconnect().catch(() => { }); }
+          }
+        } else if (targetMsg.reply_to_message) {
+          const rFrom = targetMsg.reply_to_message.from;
+          rUser = `${rFrom.first_name} ${rFrom.last_name || ''}`.trim();
+          rText = targetMsg.reply_to_message.text || targetMsg.reply_to_message.caption || null;
+          const rChat = await bot.getChat(rFrom.id).catch(() => ({}));
+          rColor = rChat.accent_color_id || 0;
+        }
 
-      await bot.sendSticker(chatId, stickerBuffer, {
-        reply_to_message_id: targetMsg.message_id
-      }, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => {
-        bot.sendSticker(chatId, stickerBuffer, {}, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => { });
-      });
+        messagesToProcess.push({
+          firstName: from.first_name,
+          lastName: from.last_name,
+          customemojiid: chat.emoji_status_custom_emoji_id,
+          message: targetMsg.text || targetMsg.caption || ' ',
+          nameColorId: chat.accent_color_id || 0,
+          inputImageBuffer: photo,
+          replySender: rUser,
+          replyMessage: rText,
+          replysendercolor: rColor,
+          entities: targetMsg.entities || targetMsg.caption_entities || []
+        });
+      }
+
+      const stickerBuffer = await createQuoteSticker(messagesToProcess);
+
+      if (count >= 4) {
+        await bot.sendDocument(chatId, stickerBuffer, { reply_to_message_id: targetMsg.message_id }, { filename: 'quote.png', contentType: 'image/png' });
+      } else {
+        await bot.sendSticker(chatId, stickerBuffer, { reply_to_message_id: targetMsg.message_id }, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => {
+          bot.sendSticker(chatId, stickerBuffer, {}, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => { });
+        });
+      }
 
     } catch (err) {
-      console.error("Q command error:", err);
+      console.error("Q command total error:", err);
     }
   });
 

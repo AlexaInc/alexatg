@@ -75,7 +75,7 @@ async function getEmojiStatusBuffer(eId) {
         const st = s.data.result?.[0]; if (!st) return null;
         const f = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/getFile`, { file_id: st.thumbnail?.file_id || st.file_id });
         const i = await axios.get(`https://api.telegram.org/file/bot${BOT_TOKEN}/${f.data.result.file_path}`, { responseType: 'arraybuffer' });
-        return await sharp(i.data).resize(100, 100).png().toBuffer();
+        return await sharp(i.data).resize(128, 128).png().toBuffer();
     } catch (e) { return null; }
 }
 
@@ -107,7 +107,11 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         const nameHtml = generateNameHtml(username, color, 30 * scale);
         let avatar = data.inputImageBuffer ? await sharp(data.inputImageBuffer).png().toBuffer() : await createDummyAvatarBuffer(data.firstName, data.lastName, color, scale);
         let mB64 = null;
-        if (data.mediaBuffer) { const b = await sharp(data.mediaBuffer).resize(400, 400, { fit: 'inside' }).png().toBuffer(); mB64 = `data:image/png;base64,${b.toString('base64')}`; }
+        if (data.mediaBuffer) {
+            // High Resolution Sticker Source
+            const b = await sharp(data.mediaBuffer).resize(512, 512, { fit: 'inside' }).png().toBuffer();
+            mB64 = `data:image/png;base64,${b.toString('base64')}`;
+        }
         const isS = !!data.mediaBuffer && (!data.message || data.message.trim() === '');
         const rColor = getTelegramDarkThemeColor(data.replysendercolor || 0);
         const rName = data.replySender ? generateNameHtml(data.replySender, rColor, 24 * scale) : '';
@@ -121,34 +125,36 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     }));
 
     const processedMessages = processedRaw.map((m, i) => {
-        const prev = processedRaw[i - 1]; const next = processedRaw[i + 1];
-        const showName = !prev || prev.userId !== m.userId;
-        const showAvatar = !next || next.userId !== m.userId;
+        const next = processedRaw[i + 1];
+        const prev = processedRaw[i - 1];
+        const nextIsSame = next && next.userId === m.userId;
+        const prevIsSame = prev && prev.userId === m.userId;
+        const showName = !prevIsSame;
+        const showAvatar = !nextIsSame;
         return { ...m, showName, showAvatar };
     });
 
     const html = `<html><head>
         <style>
         body { margin: 0; padding: 0; font-family: ${FONT_STACK}; background: transparent; -webkit-font-smoothing: antialiased; }
-        #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${10 * scale}px; width: fit-content; }
+        #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${15 * scale}px; width: fit-content; }
         .group { display: flex; align-items: flex-end; }
         
         .avatar-area { width: ${85 * scale}px; margin-right: ${12 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-        .avatar { width: ${85 * scale}px; height: ${85 * scale}px; border-radius: 50%; opacity: 1; }
-        .s-avatar-area { width: ${35 * scale}px !important; margin-right: ${8 * scale}px !important; }
-        .s-avatar { width: ${35 * scale}px !important; height: ${35 * scale}px !important; }
+        .avatar { width: ${85 * scale}px; height: ${85 * scale}px; border-radius: 50%; opacity: 1; display: block; }
+        .s-avatar-area { width: ${38 * scale}px !important; margin-right: ${8 * scale}px !important; }
+        .s-avatar { width: ${38 * scale}px !important; height: ${38 * scale}px !important; }
         .hidden-avatar { opacity: 0; } 
 
         .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${18 * scale}px ${25 * scale}px; position: relative; max-width: ${950 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .bubble-tail { border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; }
         .bubble-tail::after { content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
         
         .s-bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
         .s-bubble::after { display: none !important; }
+        .sticker { max-width: ${420 * scale}px; max-height: ${420 * scale}px; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.4)); display: block; border-radius: 12px; }
 
-        .name-line { display: flex; align-items: center; margin-bottom: ${12 * scale}px; font-size: ${32 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.1; }
+        .name-line { display: flex; align-items: center; margin-bottom: 12px; font-size: ${32 * scale}px; font-weight: bold; line-height: 1.1; }
         .msg { color: #fff; font-size: ${30 * scale}px; line-height: 1.4; word-break: break-word; }
-        .sticker { max-width: ${400 * scale}px; max-height: ${400 * scale}px; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.4)); margin: ${8 * scale}px 0; border-radius: 12px; }
     </style></head><body>
         <div id="capture">
             ${processedMessages.map(m => `
@@ -156,11 +162,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
                     <div class="avatar-area ${m.isSticker ? 's-avatar-area' : ''}">
                         <img src="${m.avatar}" class="avatar ${m.isSticker ? 's-avatar' : ''} ${!m.showAvatar ? 'hidden-avatar' : ''}" />
                     </div>
-                    <div class="bubble ${m.showAvatar ? 'bubble-tail' : ''} ${m.isSticker ? 's-bubble' : ''}">
+                    <div class="bubble ${(m.showAvatar && !m.isSticker) ? 'bubble-tail' : ''} ${m.isSticker ? 's-bubble' : ''}">
                         ${m.showName && !m.isSticker ? `
-                            <div class="name-line" style="color: ${m.nameColor}">
-                                ${m.nameHtml}
-                            </div>
+                            <div class="name-line" style="color: ${m.nameColor}">${m.nameHtml}</div>
                         ` : ''}
                         ${m.mediaBase64 ? `<img src="${m.mediaBase64}" class="sticker" />` : ''}
                         ${m.messageHtml ? `<div class="msg">${m.messageHtml}</div>` : ''}
@@ -178,9 +182,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     await page.close();
 
     return await sharp(screenshot)
-        .trim({ threshold: 5 })
+        .trim({ threshold: 5, background: { r: 0, g: 0, b: 0, alpha: 0 } })
         .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 90 })
+        .webp({ quality: 100, lossless: false }) // Max possible WebP quality
         .toBuffer();
 }
 

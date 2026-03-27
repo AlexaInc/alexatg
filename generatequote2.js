@@ -131,8 +131,8 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         };
     }));
 
-    // Expanded Font API Call to include all ranges for Symbols and Math
-    const googleFontsUrl = `https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Noto+Sans+Symbols:wght@700&family=Noto+Sans+Symbols+2:wght@700&family=Noto+Sans+Math:wght@700&family=Noto+Emoji:wght@700&display=swap`;
+    // Multi-subset Google Fonts request for maximal character coverage
+    const googleFontsUrl = `https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Noto+Sans+Symbols:wght@700&family=Noto+Sans+Symbols+2:wght@700&family=Noto+Sans+Math:wght@700&family=Noto+Emoji:wght@700&display=block`;
 
     const htmlContent = `<html lang="en"><head>
         <link href="${googleFontsUrl}" rel="stylesheet">
@@ -140,22 +140,23 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         body { 
             margin: 0; padding: ${40 * scale}px; font-family: ${FONT_STACK}; background: transparent; 
             display: flex; justify-content: center; align-items: flex-start; 
-            text-rendering: geometricPrecision; font-feature-settings: "kern" 1, "liga" 1, "calt" 1; -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased;
         }
         #capture { display: flex; flex-direction: column; gap: ${25 * scale}px; width: fit-content; padding: ${10 * scale}px; }
         .msg-group { display: flex; align-items: flex-end; width: fit-content; }
-        .avatar { width: ${75 * scale}px; height: ${75 * scale}px; border-radius: 50%; margin-right: ${15 * scale}px; flex-shrink: 0; align-self: flex-start; }
+        .avatar { width: ${75 * scale}px; height: ${75 * scale}px; border-radius: 50%; margin-right: ${15 * scale}px; flex-shrink: 0; }
+        
         .bubble { background: #2a2233; border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; padding: ${20 * scale}px ${30 * scale}px; position: relative; min-width: ${250 * scale}px; max-width: ${850 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .bubble::after { content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
         
-        /* Naked Sticker Styling: Bubble is invisible but Name/PP stay */
-        .naked-sticker { background: transparent; border-radius: 0; padding: 0; box-shadow: none; min-width: 0; margin-left: ${10 * scale}px; }
-        .naked-sticker::after { display: none; }
+        /* Transparent Naked Sticker Styling */
+        .naked-sticker { background: transparent !important; border-radius: 0; padding: 0; box-shadow: none !important; min-width: 0; }
+        .naked-sticker::after { display: none !important; }
 
-        .name-line { display: flex; align-items: center; margin-bottom: ${14 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.2; }
+        .name-line { display: flex; align-items: center; margin-bottom: ${14 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.2; font-variant-ligatures: none; }
         .e-status { width: ${28 * 1.5 * scale}px; height: ${28 * 1.5 * scale}px; margin-left: ${10 * scale}px; border-radius: 15%; }
         .message { font-size: ${28 * scale}px; line-height: 1.5; color: #fefcff; word-break: break-word; }
-        .message-sticker { max-width: ${300 * scale}px; max-height: ${300 * scale}px; margin-top: ${10 * scale}px; display: block; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.5)); }
+        .message-sticker { max-width: ${300 * scale}px; max-height: ${300 * scale}px; display: block; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4)); margin: ${10 * scale}px 0; }
         .reply { background: rgba(255,255,255,0.06); border-radius: ${12 * scale}px; position: relative; padding: ${10 * scale}px ${12 * scale}px ${10 * scale}px ${14 * scale}px; margin-bottom: ${12 * scale}px; border-left: ${5 * scale}px solid; }
         .reply-sender { font-weight: bold; font-size: ${26 * scale}px; margin-bottom: ${5 * scale}px; }
         .reply-msg { color: #b0b0b0; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 92%, transparent 100%); font-size: ${24 * scale}px; }
@@ -163,13 +164,15 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         <div id="capture">
             ${processedMessages.map(m => `
                 <div class="msg-group">
-                    <img src="${m.avatar}" class="avatar" />
+                    ${!m.isStickerOnly ? `<img src="${m.avatar}" class="avatar" />` : ''}
                     <div class="bubble ${m.isStickerOnly ? 'naked-sticker' : ''}">
-                        <div class="name-line" style="color: ${m.nameColor}">
-                            <span style="font-family: ${FONT_STACK};">${escapeHtml(m.username)}</span>
-                            ${m.eStatus ? `<img src="${m.eStatus}" class="e-status" />` : ''}
-                        </div>
-                        ${m.replySender ? `<div class="reply" style="border-left-color: ${m.rColor};"><div class="reply-sender" style="color: ${m.rColor}">${escapeHtml(m.replySender)}</div><div class="reply-msg">${escapeHtml(m.pRMsg)}</div></div>` : ''}
+                        ${!m.isStickerOnly ? `
+                            <div class="name-line" style="color: ${m.nameColor}">
+                                <span style="font-family: ${FONT_STACK};">${escapeHtml(m.username)}</span>
+                                ${m.eStatus ? `<img src="${m.eStatus}" class="e-status" />` : ''}
+                            </div>
+                            ${m.replySender ? `<div class="reply" style="border-left-color: ${m.rColor};"><div class="reply-sender" style="color: ${m.rColor}">${escapeHtml(m.replySender)}</div><div class="reply-msg">${escapeHtml(m.pRMsg)}</div></div>` : ''}
+                        ` : ''}
                         ${m.mediaBase64 ? `<img src="${m.mediaBase64}" class="message-sticker" />` : ''}
                         ${m.highlighted && m.highlighted !== ' ' ? `<div class="message">${m.highlighted}</div>` : ''}
                     </div>
@@ -178,14 +181,13 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         </div>
     </body></html>`;
 
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu'] });
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu', '--font-render-hinting=none'] });
     const page = await browser.newPage();
     await page.setViewport({ width: 4000, height: 4000 });
-    // Enhanced wait: load AND networkidle2
     await page.setContent(htmlContent, { waitUntil: ['load', 'networkidle2'], timeout: 60000 });
     // Final font check + explicit pause for shaping engine
     await page.evaluateHandle('document.fonts.ready');
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 1500));
 
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await browser.close();

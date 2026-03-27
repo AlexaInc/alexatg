@@ -62,23 +62,6 @@ function generateNameHtml(text, color, fontSize) {
         else if (c.match(/^\s+$/)) res += `<span style="white-space: pre;">${c}</span>`;
         else {
             const b = createTextChunkImageBuffer(c, fontSize, color);
-            res += `<img src="data:image/png;base64,${buf.toString('base64')}" class="name-chunk" />`;
-        }
-    }
-    return res;
-}
-
-// Fixed function for name rendering
-function generateNameHtmlFixed(text, color, fontSize) {
-    if (!text) return '';
-    const seg = new Intl.Segmenter();
-    let res = '';
-    for (const s of seg.segment(text)) {
-        const c = s.segment;
-        if (/\p{Emoji}/u.test(c)) res += `<span class="name-emoji" style="font-size: ${fontSize}px;">${escapeHtml(c)}</span>`;
-        else if (c.match(/^\s+$/)) res += `<span style="white-space: pre;">${c}</span>`;
-        else {
-            const b = createTextChunkImageBuffer(c, fontSize, color);
             res += `<img src="data:image/png;base64,${b.toString('base64')}" style="height: 1em; vertical-align: middle;" />`;
         }
     }
@@ -107,30 +90,27 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     let msgList = Array.isArray(firstName) ? firstName : [{ firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities, id: '1' }];
     const scale = 4;
 
-    // Improved Multi-Message Logic (Group by Name/Color)
     let processedRaw = await Promise.all(msgList.map(async (data) => {
         const username = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'User';
         const color = getTelegramDarkThemeColor(data.nameColorId);
-        const nameHtml = generateNameHtmlFixed(username, color, 28 * scale);
+        const nameHtml = generateNameHtml(username, color, 28 * scale);
         let avatar = data.inputImageBuffer ? await sharp(data.inputImageBuffer).png().toBuffer() : await createDummyAvatarBuffer(data.firstName, data.lastName, color, scale);
         let mB64 = null;
         if (data.mediaBuffer) { const b = await sharp(data.mediaBuffer).resize(400, 400, { fit: 'inside' }).png().toBuffer(); mB64 = `data:image/png;base64,${b.toString('base64')}`; }
         const isS = !!data.mediaBuffer && (!data.message || data.message.trim() === '');
         const rColor = getTelegramDarkThemeColor(data.replysendercolor || 0);
-        const rName = data.replySender ? generateNameHtmlFixed(data.replySender, rColor, 24 * scale) : '';
+        const rName = data.replySender ? generateNameHtml(data.replySender, rColor, 24 * scale) : '';
 
         return {
             avatar: `data:image/png;base64,${avatar.toString('base64')}`,
             nameHtml, messageHtml: highlightTextPatterns(data.message || ''),
             mediaBase64: mB64, isSticker: isS, rNameHtml: rName, rMsg: data.replyMessage, rColor, nameColor: color,
-            userId: data.id || username // Using name as ID if ID missing
+            userId: data.id || username
         };
     }));
 
-    // Apply Grouping logic like Telegram
     const processedMessages = processedRaw.map((m, i) => {
-        const prev = processedRaw[i - 1];
-        const next = processedRaw[i + 1];
+        const prev = processedRaw[i - 1]; const next = processedRaw[i + 1];
         const showName = !prev || prev.userId !== m.userId;
         const showAvatar = !next || next.userId !== m.userId;
         return { ...m, showName, showAvatar };
@@ -139,30 +119,29 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const html = `<html><head>
         <style>
         body { margin: 0; padding: 0; font-family: ${FONT_STACK}; background: transparent; -webkit-font-smoothing: antialiased; }
-        #capture { display: inline-flex; flex-direction: column; gap: ${10 * scale}px; padding: ${15 * scale}px; width: fit-content; background: transparent; }
+        #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${20 * scale}px; width: fit-content; }
         .group { display: flex; align-items: flex-end; }
         
-        .avatar-area { width: ${45 * scale}px; margin-right: ${10 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-        .avatar { width: ${45 * scale}px; height: ${45 * scale}px; border-radius: 50%; opacity: 1; }
-        .hidden-avatar { opacity: 0; } /* Keep space but hide */
+        .avatar-area { width: ${75 * scale}px; margin-right: ${12 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+        .avatar { width: ${75 * scale}px; height: ${75 * scale}px; border-radius: 50%; opacity: 1; -webkit-mask-image: linear-gradient(0deg, black, black); }
+        .hidden-avatar { opacity: 0; } 
 
-        .bubble { background: #2a2233; border-radius: ${22 * scale}px; padding: ${15 * scale}px ${22 * scale}px; position: relative; max-width: ${950 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .bubble-tail { border-radius: ${22 * scale}px ${22 * scale}px ${22 * scale}px 0; }
-        .bubble-tail::after { content: ''; position: absolute; bottom: 0; left: -${18 * scale}px; width: ${18 * scale}px; height: ${18 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M18 0 V18 H0 C9 18 18 9 18 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
+        .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${18 * scale}px ${25 * scale}px; position: relative; max-width: ${900 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .bubble-tail { border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; }
+        .bubble-tail::after { content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
         
         .s-bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
         .s-bubble::after { display: none !important; }
 
-        .name-line { display: flex; align-items: center; margin-bottom: ${10 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; }
+        .name-line { display: flex; align-items: center; margin-bottom: ${12 * scale}px; font-size: ${30 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.1; }
         .msg { color: #fff; font-size: ${28 * scale}px; line-height: 1.4; word-break: break-word; }
-        .sticker { max-width: ${400 * scale}px; max-height: ${400 * scale}px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4)); margin: ${5 * scale}px 0; }
-        .reply { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 14px; border-left: 5px solid; margin-bottom: 10px; }
+        .sticker { max-width: ${400 * scale}px; max-height: ${400 * scale}px; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.4)); margin: ${8 * scale}px 0; border-radius: 12px; }
     </style></head><body>
         <div id="capture">
             ${processedMessages.map(m => `
                 <div class="group">
                     <div class="avatar-area">
-                        <img src="${m.avatar}" class="avatar ${(!m.showAvatar || m.isSticker) ? 'hidden-avatar' : ''}" />
+                        <img src="${m.avatar}" class="avatar ${!m.showAvatar ? 'hidden-avatar' : ''}" />
                     </div>
                     <div class="bubble ${m.showAvatar ? 'bubble-tail' : ''} ${m.isSticker ? 's-bubble' : ''}">
                         ${m.showName && !m.isSticker ? `
@@ -185,9 +164,8 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await page.close();
 
-    // Auto-crop to content + resize
     return await sharp(screenshot)
-        .trim() // REMOVES ALL UNUSED WHITE SPACE AUTOMATICALLY
+        .trim(1) // Aggressive trim with 1px buffer
         .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 90 })
         .toBuffer();

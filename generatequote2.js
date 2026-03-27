@@ -106,10 +106,13 @@ async function processMessageHtml(text, entities = []) {
     resultRows.unshift(text.substring(0, lastOffset));
     
     const combined = resultRows.join('');
-    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|\/\w+)/g;
+    // IMPROVED HIGHLIGHTING: Full Bot Commands (/start@bot), Mentions, and Links
+    const highlightRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|\/\w+(?:@\w+)?)/g;
     return combined.split(/(<img[^>]+>)/).map(part => {
         if (part.startsWith('<img')) return part;
-        return part.replace(urlRegex, (p) => `<span style="color: #6ab8ed; text-decoration: underline;">${escapeHtml(p)}</span>`).replace(/\n/g, '<br/>');
+        return part.replace(highlightRegex, (p) => {
+            return `<span style="color: #6ab8ed; text-decoration: none;">${escapeHtml(p)}</span>`;
+        }).replace(/\n/g, '<br/>');
     }).join('');
 }
 

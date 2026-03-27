@@ -192,13 +192,11 @@ module.exports = function (bot, deps) {
               const photoUrl = senderId ? await getProfilePhoto(bot, senderId) : null;
               const photo = photoUrl ? await downloadImage(photoUrl) : null;
 
-              // Download sticker if present
+              // Download sticker if present via userbot client
               let mediaBuffer = null;
               if (m.sticker) {
                 try {
-                  const sFile = await bot.getFile(m.media.document.id.toString());
-                  const sUrl = `https://api.telegram.org/file/bot${deps.BOT_TOKEN}/${sFile.file_path}`;
-                  mediaBuffer = await downloadImage(sUrl);
+                  mediaBuffer = await client.downloadMedia(m.media);
                 } catch (e) { console.warn("Sticker download failed:", e); }
               }
 
@@ -260,7 +258,7 @@ module.exports = function (bot, deps) {
         if (targetMsg.sticker) {
           try {
             const sFile = await bot.getFile(targetMsg.sticker.file_id);
-            const sUrl = `https://api.telegram.org/file/bot${deps.BOT_TOKEN}/${sFile.file_path}`;
+            const sUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${sFile.file_path}`;
             mediaBuffer = await downloadImage(sUrl);
           } catch (e) { }
         }

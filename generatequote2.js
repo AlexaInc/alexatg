@@ -86,7 +86,7 @@ async function getCustomEmojiBase64(eId) {
 
 async function processMessageHtml(text, entities = []) {
     if (!text) return '';
-    let html = escapeHtml(text);
+    let chars = [...text];
     
     // Sort entities descending to replace from end (prevents offset shifting)
     const sortedEntities = (entities || []).filter(e => e.type === 'custom_emoji').sort((a,b) => b.offset - a.offset);
@@ -94,24 +94,11 @@ async function processMessageHtml(text, entities = []) {
     for (const e of sortedEntities) {
         const b64 = await getCustomEmojiBase64(e.custom_emoji_id);
         if (b64) {
-            const start = e.offset; const end = e.offset + e.length;
-            // Get original substring and replace it with img
-            const pre = text.substring(0, start); const post = text.substring(end);
-            const img = `<img src="${b64}" class="msg-emoji" />`;
-            text = pre + "PLACEHOLDER" + post; // This is simplistic, let's do it better
-        }
-    }
-
-    // Better way: character array replacement
-    let chars = [...text];
-    for (const e of sortedEntities) {
-        const b64 = await getCustomEmojiBase64(e.custom_emoji_id);
-        if (b64) {
             chars.splice(e.offset, e.length, `<img src="${b64}" class="msg-emoji" />`);
         }
     }
     
-    let res = chars.join('');
+    const res = chars.join('');
     // Apply URL/Mentions highlighting on the remaining text parts (ignoring img tags)
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|\/\w+)/g;
     return res.split(/(<img[^>]+>)/).map(part => {
@@ -171,7 +158,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         .s-avatar-area { width: ${38 * scale}px !important; margin-right: ${8 * scale}px !important; }
         .s-avatar { width: ${38 * scale}px !important; height: ${38 * scale}px !important; }
         .hidden-avatar { opacity: 0; } 
-        .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${18 * scale}px ${25 * scale}px; position: relative; max-width: ${950 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${20 * scale}px ${28 * scale}px; position: relative; max-width: ${750 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .bubble-tail { border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; }
         .bubble-tail::after { 
             content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; 
@@ -182,7 +169,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         .s-bubble::after { display: none !important; }
         .name-line { display: flex; align-items: center; margin-bottom: 12px; font-size: ${32 * scale}px; font-weight: bold; line-height: 1; }
         .e-status { height: 1.1em; width: 1.1em; margin-left: 8px; border-radius: 3px; }
-        .msg { color: #fff; font-size: ${30 * scale}px; line-height: 1.4; word-break: break-word; }
+        .msg { color: #fff; font-size: ${32 * scale}px; line-height: 1.4; word-break: break-word; }
         .msg-emoji { height: 1.1em; width: 1.1em; vertical-align: middle; margin: 0 2px; }
         .sticker { max-width: ${420 * scale}px; max-height: ${420 * scale}px; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.4)); display: block; border-radius: 12px; }
         .reply { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 14px; border-left: 5px solid; margin-bottom: 12px; max-width: 100%; box-sizing: border-box; overflow: hidden; }

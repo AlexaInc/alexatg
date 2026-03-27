@@ -355,8 +355,9 @@ function highlightTextPatterns(wrappedText) {
 
 
 async function renderMessageHTML(text, entities) {
-    if (!entities || entities.length === 0) {
-        return highlightTextPatterns(text);
+    const sanitizedText = String(text || '');
+    if (!entities || !Array.isArray(entities) || entities.length === 0) {
+        return highlightTextPatterns(sanitizedText);
     }
 
     // Sort entities by offset
@@ -366,10 +367,10 @@ async function renderMessageHTML(text, entities) {
 
     for (const entity of sortedEntities) {
         if (entity.offset > lastOffset) {
-            html += highlightTextPatterns(text.substring(lastOffset, entity.offset));
+            html += highlightTextPatterns(sanitizedText.substring(lastOffset, entity.offset));
         }
 
-        const entityText = text.substring(entity.offset, entity.offset + entity.length);
+        const entityText = sanitizedText.substring(entity.offset, entity.offset + entity.length);
         let partHtml = '';
 
         if (entity.type === 'custom_emoji') {

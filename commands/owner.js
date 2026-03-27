@@ -167,22 +167,24 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
         firstName = reply.first_name || '';
         lastName = reply.last_name || '';
         userphotourl = await getProfilePhoto(bot, reply.id);
-        msgtextt = content;
+        msgtextt = content || msg.reply_to_message.text || msg.reply_to_message.caption || ' ';
       }
 
       let entities = [];
       if (!hasValidPayload) {
-        if (msgtextt) {
+        if (msgtextt && msgtextt === content) {
           const originalOffset = msg.text.indexOf(msgtextt);
           if (originalOffset !== -1) {
             entities = (msg.entities || []).filter(e => e.offset >= originalOffset).map(e => ({ ...e, offset: e.offset - originalOffset }));
           }
+        } else if (!content && msg.reply_to_message) {
+          entities = msg.reply_to_message.entities || msg.reply_to_message.caption_entities || [];
         }
       }
 
       let userphoto = userphotourl ? await downloadImage(userphotourl) : null;
       const stickerBuffer = await createQuoteSticker(
-        firstName, lastName, chat.emoji_status_custom_emoji_id, msgtextt,
+        firstName, lastName, chat.emoji_status_custom_emoji_id, String(msgtextt),
         chat.accent_color_id, userphoto, replysender, replycontent, replysendercolor,
         entities
       );
@@ -225,26 +227,32 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
       let entities = [];
 
       if (text) {
-        const originalOffset = msg.text.indexOf(text);
-        if (originalOffset !== -1) {
-          entities = (msg.entities || []).filter(e => e.offset >= originalOffset).map(e => ({ ...e, offset: e.offset - originalOffset }));
+        let targetMsg = msg;
+
+        if (!text && msg.reply_to_message) {
+          targetMsg = msg.reply_to_message;
         }
-      } else if (msg.reply_to_message) {
-        text = msg.reply_to_message.text || msg.reply_to_message.caption || '';
-        entities = msg.reply_to_message.entities || msg.reply_to_message.caption_entities || [];
+
+        const msgText = String(targetMsg.text || targetMsg.caption || ' ');
+        const msgEntities = targetMsg.entities || targetMsg.caption_entities || [];
+
+        const stickerBuffer = await createQuoteSticker(
+          from.first_name || '',
+          from.last_name || '',
+          chat.emoji_status_custom_emoji_id,
+          msgText,
+          chat.accent_color_id,
+          userPhoto,
+          replysender,
+          replycontent,
+          replysendercolor,
+          msgEntities
+        );
+
+        await bot.sendSticker(msg.chat.id, stickerBuffer, {
+          reply_to_message_id: msg.reply_to_message?.message_id
+        }, { filename: 'quote.webp', contentType: 'image/webp' });
       }
-
-      const stickerBuffer = await createQuoteSticker(
-        from.first_name || '', from.last_name || '', chat.emoji_status_custom_emoji_id,
-        text || ' ', chat.accent_color_id, userPhoto,
-        replysender, replycontent, replysendercolor,
-        entities
-      );
-
-      await bot.sendSticker(msg.chat.id, stickerBuffer, {
-        reply_to_message_id: msg.reply_to_message?.message_id
-      }, { filename: 'quote.webp', contentType: 'image/webp' });
-
     } catch (err) { console.error(err); }
   });
 

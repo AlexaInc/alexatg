@@ -12,8 +12,8 @@ const axios = require('axios');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
 
-// Ultimate Font Stack
-const FONT_STACK = "'Noto Sans', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Sans Math', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
+// Noto Sans SC (Simplified Chinese) contains ~45k characters and is the best fallback for rare Unicode symbols.
+const FONT_STACK = "'Noto Sans', 'Noto Sans SC', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Sans Math', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Arial Unicode MS', sans-serif";
 
 function getTelegramDarkThemeColor(id) { const map = new Map([[0, '#FF516A'], [1, '#FF9442'], [2, '#C66FFF'], [3, '#50D892'], [4, '#64D4F5'], [5, '#5095ED'], [6, '#FF66A6'], [7, '#FF8280'], [8, '#EDD64E'], [9, '#C66FFF']]); return map.get(id) || '#00ffff'; }
 
@@ -135,8 +135,8 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         };
     }));
 
-    // Explicitly loading broad Noto sets with &display=block
-    const googleFontsUrl = `https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Noto+Sans+Symbols:wght@700&family=Noto+Sans+Symbols+2:wght@700&family=Noto+Sans+Math:wght@700&family=Noto+Emoji:wght@700&display=block`;
+    // Adding Noto Sans SC (Simplified Chinese) which is the most expansive symbol font Google offers
+    const googleFontsUrl = `https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Noto+Sans+SC:wght@700&family=Noto+Sans+Symbols:wght@700&family=Noto+Sans+Symbols+2:wght@700&family=Noto+Sans+Math:wght@700&display=block`;
 
     const htmlContent = `<html lang="en"><head>
         <link href="${googleFontsUrl}" rel="stylesheet">
@@ -147,24 +147,23 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased;
         }
         #capture { display: flex; flex-direction: column; gap: ${25 * scale}px; width: fit-content; padding: ${10 * scale}px; }
-        
-        /* Message Group aligned to bottom to simulate local theme */
         .msg-group { display: flex; align-items: flex-end; width: fit-content; }
         
-        /* Avatar fixed at bottom-left corner of the message content */
         .avatar { width: ${45 * scale}px; height: ${45 * scale}px; border-radius: 50%; margin-right: ${12 * scale}px; flex-shrink: 0; align-self: flex-end; margin-bottom: ${5 * scale}px; }
         
         .bubble { background: #2a2233; border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; padding: ${15 * scale}px ${25 * scale}px; position: relative; min-width: ${220 * scale}px; max-width: ${850 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .bubble::after { content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
         
+        /* Naked Sticker Styling + Smaller Avatar */
         .naked-sticker { background: transparent !important; border-radius: 0; padding: 0 !important; box-shadow: none !important; min-width: 0 !important; }
         .naked-sticker::after { display: none !important; }
+        .naked-avatar { width: ${30 * scale}px !important; height: ${30 * scale}px !important; margin-right: ${8 * scale}px; margin-bottom: 0 !important; }
 
-        .name-line { display: flex; align-items: center; margin-bottom: ${10 * scale}px; font-size: ${24 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.1; font-feature-settings: "kern" 1; }
-        .name-line span { display: inline-block; } /* Forced block segmentation for diacritics */
+        .name-line { display: flex; align-items: center; margin-bottom: ${10 * scale}px; font-size: ${24 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.1; font-feature-settings: "kern" 1, "liga" 0; }
+        .name-line span { display: inline-block; } 
         .e-status { width: ${20 * 1.5 * scale}px; height: ${20 * 1.5 * scale}px; margin-left: ${8 * scale}px; border-radius: 15%; }
         .message { font-size: ${26 * scale}px; line-height: 1.4; color: #fefcff; word-break: break-word; }
-        .message-sticker { max-width: ${350 * scale}px; max-height: ${350 * scale}px; display: block; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.3)); margin: ${5 * scale}px 0; border-radius: 12px; }
+        .message-sticker { max-width: ${350 * scale}px; max-height: ${350 * scale}px; display: block; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.4)); margin: ${5 * scale}px 0; border-radius: 12px; }
         
         .reply { background: rgba(255,255,255,0.06); border-radius: ${12 * scale}px; position: relative; padding: ${8 * scale}px ${10 * scale}px ${8 * scale}px ${12 * scale}px; margin-bottom: ${10 * scale}px; border-left: ${4 * scale}px solid; }
         .reply-sender { font-weight: bold; font-size: ${22 * scale}px; margin-bottom: ${4 * scale}px; }
@@ -173,7 +172,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         <div id="capture">
             ${processedMessages.map(m => `
                 <div class="msg-group">
-                    <img src="${m.avatar}" class="avatar" />
+                    <img src="${m.avatar}" class="avatar ${m.isStickerOnly ? 'naked-avatar' : ''}" />
                     <div class="bubble ${m.isStickerOnly ? 'naked-sticker' : ''}">
                         ${!m.isStickerOnly ? `
                             <div class="name-line" style="color: ${m.nameColor}">
@@ -194,7 +193,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         headless: true, args: [
             '--no-sandbox', '--disable-gpu', '--font-render-hinting=none',
             '--disable-features=FontSrcLocalMatching', '--disable-web-security',
-            '--force-color-profile=srgb', '--disable-dev-shm-usage', '--hide-scrollbars'
+            '--force-color-profile=srgb', '--disable-dev-shm-usage'
         ]
     });
 
@@ -203,8 +202,8 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     await page.setContent(htmlContent, { waitUntil: ['networkidle0', 'load'], timeout: 60000 });
     await page.evaluateHandle('document.fonts.ready');
 
-    // Settling time increased to 4.0s for very complex VPS environments
-    await new Promise(r => setTimeout(r, 4000));
+    // Settling time for shaping engine
+    await new Promise(r => setTimeout(r, 3000));
 
     const screenshotBuffer = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await browser.close();

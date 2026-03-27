@@ -151,6 +151,9 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
     try {
       if (hasValidPayload) {
         const data = JSON.parse(content);
+        if (botOWNER_IDS.includes(data.sender)) {
+          return bot.sendMessage(msg.chat.id, 'you cant create sticker of bot owner');
+        }
         chat = await bot.getChat(data.sender);
         const rchat = data.rsender ? await bot.getChat(data.rsender) : null;
 
@@ -163,6 +166,9 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
         userphotourl = await getProfilePhoto(bot, data.sender);
       } else {
         const reply = msg.reply_to_message.from;
+        if (botOWNER_IDS.includes(reply.id)) {
+          return bot.sendMessage(msg.chat.id, 'you cant create sticker of bot owner');
+        }
         chat = await bot.getChat(reply.id);
         firstName = reply.first_name || '';
         lastName = reply.last_name || '';

@@ -53,7 +53,7 @@ function createTextChunkImageBuffer(text, fontSize, color) {
     return tCanvas.toBuffer('image/png');
 }
 
-function generateNameHtml(text, color, fontSize, entities = []) {
+function generateNameHtml(text, color, fontSize) {
     if (!text) return '';
     const seg = new Intl.Segmenter();
     let res = '';
@@ -70,7 +70,6 @@ function generateNameHtml(text, color, fontSize, entities = []) {
 }
 
 const EMOJI_CACHE = new Map();
-
 async function getCustomEmojiBase64(eId) {
     if (EMOJI_CACHE.has(eId)) return EMOJI_CACHE.get(eId);
     try {
@@ -78,7 +77,7 @@ async function getCustomEmojiBase64(eId) {
         const st = s.data.result?.[0]; if (!st) return null;
         const f = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/getFile`, { file_id: st.thumbnail?.file_id || st.file_id });
         const i = await axios.get(`https://api.telegram.org/file/bot${BOT_TOKEN}/${f.data.result.file_path}`, { responseType: 'arraybuffer' });
-        const buf = await sharp(i.data).resize(100, 100).png().toBuffer();
+        const buf = await sharp(i.data).resize(128, 128).png().toBuffer();
         const b64 = `data:image/png;base64,${buf.toString('base64')}`;
         EMOJI_CACHE.set(eId, b64); return b64;
     } catch (e) { return null; }
@@ -87,19 +86,12 @@ async function getCustomEmojiBase64(eId) {
 async function processMessageHtml(text, entities = []) {
     if (!text) return '';
     let chars = [...text];
-    
-    // Sort entities descending to replace from end (prevents offset shifting)
-    const sortedEntities = (entities || []).filter(e => e.type === 'custom_emoji').sort((a,b) => b.offset - a.offset);
-    
-    for (const e of sortedEntities) {
+    const sorted = (entities || []).filter(e => e.type === 'custom_emoji').sort((a,b) => b.offset - a.offset);
+    for (const e of sorted) {
         const b64 = await getCustomEmojiBase64(e.custom_emoji_id);
-        if (b64) {
-            chars.splice(e.offset, e.length, `<img src="${b64}" class="msg-emoji" />`);
-        }
+        if (b64) chars.splice(e.offset, e.length, `<img src="${b64}" class="msg-emoji" />`);
     }
-    
     const res = chars.join('');
-    // Apply URL/Mentions highlighting on the remaining text parts (ignoring img tags)
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|\/\w+)/g;
     return res.split(/(<img[^>]+>)/).map(part => {
         if (part.startsWith('<img')) return part;
@@ -119,25 +111,28 @@ async function createDummyAvatarBuffer(f, l, color, scale) {
 
 async function createImage(firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities = []) {
     let msgList = Array.isArray(firstName) ? firstName : [{ firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities, id: '1' }];
-    const scale = 4;
-    
+    const scale = 5; // ULTRA HD SCALE 
+
     let processedRaw = await Promise.all(msgList.map(async (data) => {
         const username = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'User';
         const color = getTelegramDarkThemeColor(data.nameColorId);
-        const nameHtml = generateNameHtml(username, color, 30 * scale);
+        const nameHtml = generateNameHtml(username, color, 32 * scale);
         let avatar = data.inputImageBuffer ? await sharp(data.inputImageBuffer).png().toBuffer() : await createDummyAvatarBuffer(data.firstName, data.lastName, color, scale);
         let mB64 = null;
-        if (data.mediaBuffer) { const b = await sharp(data.mediaBuffer).resize(512, 512, { fit: 'inside' }).png().toBuffer(); mB64 = `data:image/png;base64,${b.toString('base64')}`; }
+        if (data.mediaBuffer) { 
+            const b = await sharp(data.mediaBuffer).resize(512, 512, { fit: 'inside' }).png().toBuffer(); 
+            mB64 = `data:image/png;base64,${b.toString('base64')}`; 
+        }
         const isS = !!data.mediaBuffer && (!data.message || data.message.trim() === '');
         const rColor = getTelegramDarkThemeColor(data.replysendercolor || 0);
-        const rName = data.replySender ? generateNameHtml(data.replySender, rColor, 24 * scale) : '';
-        const eStatus = data.customemojiid ? await getCustomEmojiBase64(data.customemojiid) : null;
-        const messageHtml = await processMessageHtml(data.message || '', data.entities || []);
+        const rName = data.replySender ? generateNameHtml(data.replySender, rColor, 26 * scale) : '';
+        const eStat = data.customemojiid ? await getCustomEmojiBase64(data.customemojiid) : null;
+        const msgH = await processMessageHtml(data.message || '', data.entities || []);
 
         return {
             avatar: `data:image/png;base64,${avatar.toString('base64')}`,
-            nameHtml, messageHtml, mediaBase64: mB64, isSticker: isS, rNameHtml: rName, rMsg: data.replyMessage, rColor, nameColor: color,
-            userId: data.id || username, eStatus
+            nameHtml, messageHtml: msgH, mediaBase64: mB64, isSticker: isS, rNameHtml: rName, rMsg: data.replyMessage, rColor, nameColor: color,
+            userId: data.id || username, eStatus: eStat
         };
     }));
 
@@ -150,31 +145,34 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 
     const html = `<html><head>
         <style>
-        body { margin: 0; padding: 0; font-family: ${FONT_STACK}; background: transparent; -webkit-font-smoothing: antialiased; }
-        #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${18 * scale}px; width: fit-content; }
+        body { margin: 0; padding: 0; font-family: ${FONT_STACK}; background: transparent; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+        #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${12 * scale}px; width: fit-content; }
         .group { display: flex; align-items: flex-end; }
-        .avatar-area { width: ${85 * scale}px; margin-right: ${12 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-        .avatar { width: ${85 * scale}px; height: ${85 * scale}px; border-radius: 50%; opacity: 1; display: block; }
-        .s-avatar-area { width: ${38 * scale}px !important; margin-right: ${8 * scale}px !important; }
-        .s-avatar { width: ${38 * scale}px !important; height: ${38 * scale}px !important; }
+        
+        .avatar-area { width: ${85 * scale}px; margin-right: ${10 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+        .avatar { width: ${85 * scale}px; height: ${85 * scale}px; border-radius: 50%; display: block; }
+        .s-avatar-area { width: ${42 * scale}px !important; margin-right: ${8 * scale}px !important; }
+        .s-avatar { width: ${42 * scale}px !important; height: ${42 * scale}px !important; }
         .hidden-avatar { opacity: 0; } 
-        .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${20 * scale}px ${28 * scale}px; position: relative; max-width: ${750 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+
+        .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${20 * scale}px ${30 * scale}px; position: relative; max-width: ${700 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
         .bubble-tail { border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; }
         .bubble-tail::after { 
             content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; 
             background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); 
             background-size: contain; 
         }
+        
         .s-bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
         .s-bubble::after { display: none !important; }
-        .name-line { display: flex; align-items: center; margin-bottom: 12px; font-size: ${32 * scale}px; font-weight: bold; line-height: 1; }
-        .e-status { height: 1.1em; width: 1.1em; margin-left: 8px; border-radius: 3px; }
-        .msg { color: #fff; font-size: ${32 * scale}px; line-height: 1.4; word-break: break-word; }
-        .msg-emoji { height: 1.1em; width: 1.1em; vertical-align: middle; margin: 0 2px; }
-        .sticker { max-width: ${420 * scale}px; max-height: ${420 * scale}px; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.4)); display: block; border-radius: 12px; }
-        .reply { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 14px; border-left: 5px solid; margin-bottom: 12px; max-width: 100%; box-sizing: border-box; overflow: hidden; }
-        .r-name { font-weight: bold; margin-bottom: 4px; font-size: ${24 * scale}px; line-height: 1; }
-        .r-msg { color: #b0b0b0; font-size: ${22 * scale}px; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); }
+
+        .name-line { display: flex; align-items: center; margin-bottom: ${10 * scale}px; font-size: ${32 * scale}px; font-weight: bold; line-height: 1.1; }
+        .e-status { height: 1.15em; width: 1.15em; margin-left: 8px; border-radius: 4px; }
+        .msg { color: #fff; font-size: ${36 * scale}px; line-height: 1.5; word-break: break-word; font-weight: 500; }
+        .sticker { max-width: ${400 * scale}px; max-height: ${400 * scale}px; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.4)); display: block; border-radius: 12px; }
+        .reply { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px; border-left: 6px solid; margin-bottom: 12px; max-width: 100%; box-sizing: border-box; }
+        .r-name { font-weight: bold; margin-bottom: 4px; font-size: ${26 * scale}px; line-height: 1; }
+        .r-msg { color: #b0b0b0; font-size: ${24 * scale}px; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); }
     </style></head><body>
         <div id="capture">
             ${processedMessages.map(m => `
@@ -205,11 +203,16 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 
     const browser = await getBrowser();
     const page = await browser.newPage();
-    await page.setViewport({ width: 4000, height: 4000 });
+    await page.setViewport({ width: 5000, height: 5000 });
     await page.setContent(html, { waitUntil: 'load' });
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await page.close();
-    return await sharp(screenshot).trim({ threshold: 5 }).resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true }).webp({ quality: 100 }).toBuffer();
+    
+    return await sharp(screenshot)
+        .trim({ threshold: 5 }) 
+        .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 100, lossless: false, effort: 6 }) // Max quality settings
+        .toBuffer();
 }
 
 module.exports = createImage;

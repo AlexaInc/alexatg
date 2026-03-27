@@ -12,8 +12,8 @@ const axios = require('axios');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
 
-// Comprehensive font stack for global coverage
-const FONT_STACK = "'Noto Sans', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Sans Math', 'Noto Color Emoji', 'Inter', 'Roboto', 'Segoe UI', 'Segoe UI Emoji', sans-serif";
+// Ultimate Font Stack for Global Character Support
+const FONT_STACK = "'Noto Sans', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Sans Math', 'Inter', 'Roboto', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
 
 function getTelegramDarkThemeColor(id) { const map = new Map([[0, '#FF516A'], [1, '#FF9442'], [2, '#C66FFF'], [3, '#50D892'], [4, '#64D4F5'], [5, '#5095ED'], [6, '#FF66A6'], [7, '#FF8280'], [8, '#EDD64E'], [9, '#C66FFF']]); return map.get(id) || '#00ffff'; }
 
@@ -112,27 +112,49 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         let pRMsg = data.replyMessage; if (pRMsg && pRMsg.length > 50) pRMsg = pRMsg.substring(0, 50);
         let avatar = data.inputImageBuffer ? await sharp(data.inputImageBuffer).png().toBuffer() : await createDummyAvatarBuffer(data.firstName || 'U', data.lastName || '', nameColor, scale);
         const eStatus = data.customemojiid ? await getEmojiStatusBuffer(data.customemojiid) : null;
+
+        let mediaBase64 = null;
+        if (data.mediaBuffer) {
+            try {
+                const b = await sharp(data.mediaBuffer).resize(400, 400, { fit: 'inside' }).png().toBuffer();
+                mediaBase64 = `data:image/png;base64,${b.toString('base64')}`;
+            } catch (e) { }
+        }
+
         return {
             avatar: `data:image/png;base64,${avatar.toString('base64')}`,
             username,
             eStatus: eStatus ? `data:image/png;base64,${eStatus.toString('base64')}` : null,
-            replySender: data.replySender, pRMsg, highlighted, nameColor, rColor
+            replySender: data.replySender, pRMsg, highlighted, nameColor, rColor,
+            mediaBase64
         };
     }));
 
-    // Added all required Noto fonts for symbols and global characters
-    const htmlContent = `<html><head>
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Noto+Sans+JP:wght@700&family=Noto+Sans+KR:wght@700&family=Noto+Sans+SC:wght@700&family=Noto+Sans+TC:wght@700&family=Noto+Sans+Symbols:wght@700&family=Noto+Sans+Symbols+2:wght@700&family=Noto+Sans+Math:wght@700&family=Noto+Emoji:wght@700&display=swap" rel="stylesheet">
+    // Forced Latin Extended and Symbols from Google Fonts
+    const htmlContent = `<html lang="en"><head>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,700;1,700&family=Noto+Sans+Symbols:wght@700&family=Noto+Sans+Symbols+2:wght@700&family=Noto+Sans+Math:wght@700&family=Noto+Emoji:wght@700&display=block" rel="stylesheet">
         <style>
-        body { margin: 0; padding: ${40 * scale}px; font-family: ${FONT_STACK}; background: transparent; display: flex; justify-content: center; align-items: flex-start; }
+        body { 
+            margin: 0; 
+            padding: ${40 * scale}px; 
+            font-family: ${FONT_STACK}; 
+            background: transparent; 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start; 
+            text-rendering: optimizeLegibility;
+            font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+            -webkit-font-smoothing: antialiased;
+        }
         #capture { display: flex; flex-direction: column; gap: ${25 * scale}px; width: fit-content; padding: ${10 * scale}px; }
         .msg-group { display: flex; align-items: flex-end; width: fit-content; }
         .avatar { width: ${75 * scale}px; height: ${75 * scale}px; border-radius: 50%; margin-right: ${15 * scale}px; flex-shrink: 0; }
         .bubble { background: #2a2233; border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; padding: ${20 * scale}px ${30 * scale}px; position: relative; min-width: ${250 * scale}px; max-width: ${850 * scale}px; display: flex; flex-direction: column; }
         .bubble::after { content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
-        .name-line { display: flex; align-items: center; margin-bottom: ${14 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; }
+        .name-line { display: flex; align-items: center; margin-bottom: ${14 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.2; }
         .e-status { width: ${28 * 1.5 * scale}px; height: ${28 * 1.5 * scale}px; margin-left: ${10 * scale}px; border-radius: 15%; }
         .message { font-size: ${28 * scale}px; line-height: 1.5; color: #fefcff; word-break: break-word; }
+        .message-sticker { max-width: ${300 * scale}px; max-height: ${300 * scale}px; margin: ${10 * scale}px 0; display: block; }
         .message-custom-emoji { width: 1.2em; height: 1.2em; vertical-align: middle; }
         .reply { background: rgba(255,255,255,0.06); border-radius: ${12 * scale}px; position: relative; padding: ${10 * scale}px ${12 * scale}px ${10 * scale}px ${14 * scale}px; margin-bottom: ${12 * scale}px; border-left: ${5 * scale}px solid; }
         .reply-sender { font-weight: bold; font-size: ${26 * scale}px; margin-bottom: ${5 * scale}px; }
@@ -144,11 +166,12 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
                     <img src="${m.avatar}" class="avatar" />
                     <div class="bubble">
                         <div class="name-line" style="color: ${m.nameColor}">
-                            <span>${escapeHtml(m.username)}</span>
+                            <span style="font-family: ${FONT_STACK};">${escapeHtml(m.username)}</span>
                             ${m.eStatus ? `<img src="${m.eStatus}" class="e-status" />` : ''}
                         </div>
                         ${m.replySender ? `<div class="reply" style="border-left-color: ${m.rColor};"><div class="reply-sender" style="color: ${m.rColor}">${escapeHtml(m.replySender)}</div><div class="reply-msg">${escapeHtml(m.pRMsg)}</div></div>` : ''}
-                        <div class="message">${m.highlighted}</div>
+                        ${m.mediaBase64 ? `<img src="${m.mediaBase64}" class="message-sticker" />` : ''}
+                        ${m.highlighted && m.highlighted !== ' ' ? `<div class="message">${m.highlighted}</div>` : ''}
                     </div>
                 </div>
             `).join('')}
@@ -158,7 +181,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu'] });
     const page = await browser.newPage();
     await page.setViewport({ width: 4000, height: 4000 });
-    await page.setContent(htmlContent, { waitUntil: 'networkidle2' });
+    await page.setContent(htmlContent, { waitUntil: 'networkidle2', timeout: 30000 });
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await browser.close();
 

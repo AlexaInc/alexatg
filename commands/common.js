@@ -192,6 +192,16 @@ module.exports = function (bot, deps) {
               const photoUrl = senderId ? await getProfilePhoto(bot, senderId) : null;
               const photo = photoUrl ? await downloadImage(photoUrl) : null;
 
+              // Download sticker if present
+              let mediaBuffer = null;
+              if (m.sticker) {
+                try {
+                  const sFile = await bot.getFile(m.media.document.id.toString());
+                  const sUrl = `https://api.telegram.org/file/bot${deps.BOT_TOKEN}/${sFile.file_path}`;
+                  mediaBuffer = await downloadImage(sUrl);
+                } catch (e) { console.warn("Sticker download failed:", e); }
+              }
+
               // Convert GramJS entities to plain objects
               const entities = (m.entities || []).map(e => {
                 let type = 'unknown';
@@ -206,14 +216,13 @@ module.exports = function (bot, deps) {
               });
 
               let rUser = null, rText = null, rColor = null;
-              // Add reply context ONLY to the first message if 'r' is present
               if (i === 0 && withReply && m.replyTo) {
                 const gfMsgs = await client.getMessages(chatEntity, { ids: [m.replyTo.replyToMsgId] });
                 const gf = gfMsgs[0];
                 if (gf) {
                   const s = gf.sender;
                   rUser = `${s?.firstName || ''} ${s?.lastName || ''}`.trim() || 'User';
-                  rText = gf.message || gf.caption || 'Media';
+                  rText = gf.message || gf.caption || (gf.sticker ? "Sticker" : "Media");
                   rColor = s?.color?.colorId || (Math.floor(Math.random() * 7));
                 }
               }
@@ -228,7 +237,8 @@ module.exports = function (bot, deps) {
                 replySender: rUser,
                 replyMessage: rText,
                 replysendercolor: rColor,
-                entities
+                entities,
+                mediaBuffer
               });
             }
           } catch (e) {
@@ -246,6 +256,15 @@ module.exports = function (bot, deps) {
         const photo = photoUrl ? await downloadImage(photoUrl) : null;
         const chat = await bot.getChat(from.id).catch(() => ({}));
 
+        let mediaBuffer = null;
+        if (targetMsg.sticker) {
+          try {
+            const sFile = await bot.getFile(targetMsg.sticker.file_id);
+            const sUrl = `https://api.telegram.org/file/bot${deps.BOT_TOKEN}/${sFile.file_path}`;
+            mediaBuffer = await downloadImage(sUrl);
+          } catch (e) { }
+        }
+
         let rUser = null, rText = null, rColor = null;
         if (withReply) {
           const client = await getUserbotClient();
@@ -258,7 +277,7 @@ module.exports = function (bot, deps) {
                 if (gfs[0]) {
                   const s = gfs[0].sender;
                   rUser = `${s?.firstName || ''} ${s?.lastName || ''}`.trim() || 'User';
-                  rText = gfs[0].message || gfs[0].caption || 'Media';
+                  rText = gfs[0].message || gfs[0].caption || (gfs[0].sticker ? "Sticker" : "Media");
                   rColor = s?.color?.colorId || 0;
                 }
               }
@@ -267,7 +286,7 @@ module.exports = function (bot, deps) {
         } else if (targetMsg.reply_to_message) {
           const rFrom = targetMsg.reply_to_message.from;
           rUser = `${rFrom.first_name} ${rFrom.last_name || ''}`.trim();
-          rText = targetMsg.reply_to_message.text || targetMsg.reply_to_message.caption || null;
+          rText = targetMsg.reply_to_message.text || targetMsg.reply_to_message.caption || (targetMsg.reply_to_message.sticker ? "Sticker" : null);
           const rChat = await bot.getChat(rFrom.id).catch(() => ({}));
           rColor = rChat.accent_color_id || 0;
         }
@@ -282,7 +301,8 @@ module.exports = function (bot, deps) {
           replySender: rUser,
           replyMessage: rText,
           replysendercolor: rColor,
-          entities: targetMsg.entities || targetMsg.caption_entities || []
+          entities: targetMsg.entities || targetMsg.caption_entities || [],
+          mediaBuffer
         });
       }
 

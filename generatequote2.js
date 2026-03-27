@@ -83,17 +83,31 @@ async function getCustomEmojiBase64(eId) {
     } catch (e) { return null; }
 }
 
+// FIXED: Correct UTF-16 Offset-based slice and replace logic
 async function processMessageHtml(text, entities = []) {
     if (!text) return '';
-    let chars = [...text];
     const sorted = (entities || []).filter(e => e.type === 'custom_emoji').sort((a,b) => b.offset - a.offset);
+    
+    let resultRows = []; // Using pieces to avoid offset issues
+    let lastOffset = text.length;
+
     for (const e of sorted) {
         const b64 = await getCustomEmojiBase64(e.custom_emoji_id);
-        if (b64) chars.splice(e.offset, e.length, `<img src="${b64}" class="msg-emoji" />`);
+        if (b64) {
+            // Get everything AFTER this emoji up to last handled offset
+            const post = text.substring(e.offset + e.length, lastOffset);
+            resultRows.unshift(post);
+            // Put the emoji image
+            resultRows.unshift(`<img src="${b64}" class="msg-emoji" />`);
+            lastOffset = e.offset;
+        }
     }
-    const res = chars.join('');
+    // Add the remaining START of the string
+    resultRows.unshift(text.substring(0, lastOffset));
+    
+    const combined = resultRows.join('');
     const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|\/\w+)/g;
-    return res.split(/(<img[^>]+>)/).map(part => {
+    return combined.split(/(<img[^>]+>)/).map(part => {
         if (part.startsWith('<img')) return part;
         return part.replace(urlRegex, (p) => `<span style="color: #6ab8ed; text-decoration: underline;">${escapeHtml(p)}</span>`).replace(/\n/g, '<br/>');
     }).join('');
@@ -111,7 +125,7 @@ async function createDummyAvatarBuffer(f, l, color, scale) {
 
 async function createImage(firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities = []) {
     let msgList = Array.isArray(firstName) ? firstName : [{ firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities, id: '1' }];
-    const scale = 5; // ULTRA HD SCALE 
+    const scale = 5; 
 
     let processedRaw = await Promise.all(msgList.map(async (data) => {
         const username = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'User';
@@ -148,13 +162,11 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         body { margin: 0; padding: 0; font-family: ${FONT_STACK}; background: transparent; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
         #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${12 * scale}px; width: fit-content; }
         .group { display: flex; align-items: flex-end; }
-        
         .avatar-area { width: ${85 * scale}px; margin-right: ${10 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
         .avatar { width: ${85 * scale}px; height: ${85 * scale}px; border-radius: 50%; display: block; }
         .s-avatar-area { width: ${42 * scale}px !important; margin-right: ${8 * scale}px !important; }
         .s-avatar { width: ${42 * scale}px !important; height: ${42 * scale}px !important; }
         .hidden-avatar { opacity: 0; } 
-
         .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${20 * scale}px ${30 * scale}px; position: relative; max-width: ${700 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
         .bubble-tail { border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; }
         .bubble-tail::after { 
@@ -162,13 +174,11 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); 
             background-size: contain; 
         }
-        
         .s-bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
-        .s-bubble::after { display: none !important; }
-
         .name-line { display: flex; align-items: center; margin-bottom: ${10 * scale}px; font-size: ${32 * scale}px; font-weight: bold; line-height: 1.1; }
         .e-status { height: 1.15em; width: 1.15em; margin-left: 8px; border-radius: 4px; }
         .msg { color: #fff; font-size: ${36 * scale}px; line-height: 1.5; word-break: break-word; font-weight: 500; }
+        .msg-emoji { height: 1.1em; width: 1.1em; vertical-align: middle; margin: 0 2px; }
         .sticker { max-width: ${400 * scale}px; max-height: ${400 * scale}px; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.4)); display: block; border-radius: 12px; }
         .reply { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px; border-left: 6px solid; margin-bottom: 12px; max-width: 100%; box-sizing: border-box; }
         .r-name { font-weight: bold; margin-bottom: 4px; font-size: ${26 * scale}px; line-height: 1; }
@@ -208,11 +218,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await page.close();
     
-    return await sharp(screenshot)
-        .trim({ threshold: 5 }) 
-        .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 100, lossless: false, effort: 6 }) // Max quality settings
-        .toBuffer();
+    return await sharp(screenshot).trim({ threshold: 5 }).resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true }).webp({ quality: 100 }).toBuffer();
 }
 
 module.exports = createImage;

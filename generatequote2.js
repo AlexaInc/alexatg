@@ -154,7 +154,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         .name-line { display: flex; align-items: center; margin-bottom: ${14 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.2; }
         .e-status { width: ${28 * 1.5 * scale}px; height: ${28 * 1.5 * scale}px; margin-left: ${10 * scale}px; border-radius: 15%; }
         .message { font-size: ${28 * scale}px; line-height: 1.5; color: #fefcff; word-break: break-word; }
-        .message-sticker { max-width: ${300 * scale}px; max-height: ${300 * scale}px; margin: ${10 * scale}px 0; display: block; }
+        .message-sticker { max-width: ${300 * scale}px; max-height: ${300 * scale}px; margin: ${10 * scale}px 0; display: block; border-radius: 10px; }
         .message-custom-emoji { width: 1.2em; height: 1.2em; vertical-align: middle; }
         .reply { background: rgba(255,255,255,0.06); border-radius: ${12 * scale}px; position: relative; padding: ${10 * scale}px ${12 * scale}px ${10 * scale}px ${14 * scale}px; margin-bottom: ${12 * scale}px; border-left: ${5 * scale}px solid; }
         .reply-sender { font-weight: bold; font-size: ${26 * scale}px; margin-bottom: ${5 * scale}px; }
@@ -176,12 +176,19 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
                 </div>
             `).join('')}
         </div>
+        <!-- Hidden div to force load all chars in Noto -->
+        <div style="opacity: 0; font-family: 'Noto Sans Symbols', 'Noto Sans Math'; height: 0; overflow: hidden;">
+            ⎯ᷝ⎯ⷨ͢𝗛𝛬zzυᴰⱽˣ🔥◓𝆺꯭𝅥⎯ͯ 123 ABC
+        </div>
     </body></html>`;
 
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu'] });
     const page = await browser.newPage();
     await page.setViewport({ width: 4000, height: 4000 });
-    await page.setContent(htmlContent, { waitUntil: 'networkidle2', timeout: 30000 });
+    // Use a longer timeout and wait for fonts explicitly
+    await page.setContent(htmlContent, { waitUntil: ['networkidle2', 'load'], timeout: 60000 });
+    // Additional wait for font rendering
+    await page.evaluateHandle('document.fonts.ready');
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await browser.close();
 

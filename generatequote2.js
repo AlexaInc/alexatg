@@ -134,7 +134,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         .group { display: flex; align-items: flex-end; }
         
         .avatar-area { width: ${85 * scale}px; margin-right: ${12 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-        .avatar { width: ${85 * scale}px; height: ${85 * scale}px; border-radius: 50%; opacity: 1; -webkit-mask-image: linear-gradient(0deg, black, black); }
+        .avatar { width: ${85 * scale}px; height: ${85 * scale}px; border-radius: 50%; opacity: 1; }
+        .s-avatar-area { width: ${35 * scale}px !important; margin-right: ${8 * scale}px !important; }
+        .s-avatar { width: ${35 * scale}px !important; height: ${35 * scale}px !important; }
         .hidden-avatar { opacity: 0; } 
 
         .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${18 * scale}px ${25 * scale}px; position: relative; max-width: ${950 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
@@ -151,8 +153,8 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         <div id="capture">
             ${processedMessages.map(m => `
                 <div class="group">
-                    <div class="avatar-area">
-                        <img src="${m.avatar}" class="avatar ${!m.showAvatar ? 'hidden-avatar' : ''}" />
+                    <div class="avatar-area ${m.isSticker ? 's-avatar-area' : ''}">
+                        <img src="${m.avatar}" class="avatar ${m.isSticker ? 's-avatar' : ''} ${!m.showAvatar ? 'hidden-avatar' : ''}" />
                     </div>
                     <div class="bubble ${m.showAvatar ? 'bubble-tail' : ''} ${m.isSticker ? 's-bubble' : ''}">
                         ${m.showName && !m.isSticker ? `
@@ -176,7 +178,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     await page.close();
 
     return await sharp(screenshot)
-        .trim({ threshold: 5 }) // CORRECTED FOR SHARP 0.33+
+        .trim({ threshold: 5 })
         .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 90 })
         .toBuffer();

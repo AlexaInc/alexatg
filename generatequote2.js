@@ -12,8 +12,8 @@ const axios = require('axios');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
 
-// Ultimate Font Stack for Global Character Support
-const FONT_STACK = "'Noto Sans', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Sans Math', 'Inter', 'Roboto', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
+// Quotly-style Font Stack
+const FONT_STACK = "'Noto Sans', 'Inter', 'Roboto', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Sans Math', sans-serif";
 
 function getTelegramDarkThemeColor(id) { const map = new Map([[0, '#FF516A'], [1, '#FF9442'], [2, '#C66FFF'], [3, '#50D892'], [4, '#64D4F5'], [5, '#5095ED'], [6, '#FF66A6'], [7, '#FF8280'], [8, '#EDD64E'], [9, '#C66FFF']]); return map.get(id) || '#00ffff'; }
 
@@ -144,19 +144,18 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         }
         #capture { display: flex; flex-direction: column; gap: ${25 * scale}px; width: fit-content; padding: ${10 * scale}px; }
         .msg-group { display: flex; align-items: flex-end; width: fit-content; }
-        .avatar { width: ${75 * scale}px; height: ${75 * scale}px; border-radius: 50%; margin-right: ${15 * scale}px; flex-shrink: 0; }
+        .avatar { width: ${75 * scale}px; height: ${75 * scale}px; border-radius: 50%; margin-right: ${15 * scale}px; flex-shrink: 0; align-self: flex-start; margin-top: 10px; }
         
         .bubble { background: #2a2233; border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; padding: ${20 * scale}px ${30 * scale}px; position: relative; min-width: ${250 * scale}px; max-width: ${850 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .bubble::after { content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
         
-        /* Transparent Naked Sticker Styling */
         .naked-sticker { background: transparent !important; border-radius: 0; padding: 0; box-shadow: none !important; min-width: 0; }
         .naked-sticker::after { display: none !important; }
 
         .name-line { display: flex; align-items: center; margin-bottom: ${14 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.2; font-variant-ligatures: none; }
         .e-status { width: ${28 * 1.5 * scale}px; height: ${28 * 1.5 * scale}px; margin-left: ${10 * scale}px; border-radius: 15%; }
         .message { font-size: ${28 * scale}px; line-height: 1.5; color: #fefcff; word-break: break-word; }
-        .message-sticker { max-width: ${300 * scale}px; max-height: ${300 * scale}px; display: block; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.4)); margin: ${10 * scale}px 0; }
+        .message-sticker { max-width: ${300 * scale}px; max-height: ${300 * scale}px; display: block; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5)); }
         .reply { background: rgba(255,255,255,0.06); border-radius: ${12 * scale}px; position: relative; padding: ${10 * scale}px ${12 * scale}px ${10 * scale}px ${14 * scale}px; margin-bottom: ${12 * scale}px; border-left: ${5 * scale}px solid; }
         .reply-sender { font-weight: bold; font-size: ${26 * scale}px; margin-bottom: ${5 * scale}px; }
         .reply-msg { color: #b0b0b0; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 92%, transparent 100%); font-size: ${24 * scale}px; }
@@ -164,7 +163,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         <div id="capture">
             ${processedMessages.map(m => `
                 <div class="msg-group">
-                    ${!m.isStickerOnly ? `<img src="${m.avatar}" class="avatar" />` : ''}
+                    <img src="${m.avatar}" class="avatar" />
                     <div class="bubble ${m.isStickerOnly ? 'naked-sticker' : ''}">
                         ${!m.isStickerOnly ? `
                             <div class="name-line" style="color: ${m.nameColor}">
@@ -181,13 +180,13 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         </div>
     </body></html>`;
 
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu', '--font-render-hinting=none'] });
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu', '--font-render-hinting=none', '--force-color-profile=srgb', '--disable-features=FontSrcLocalMatching'] });
     const page = await browser.newPage();
     await page.setViewport({ width: 4000, height: 4000 });
-    await page.setContent(htmlContent, { waitUntil: ['load', 'networkidle2'], timeout: 60000 });
-    // Final font check + explicit pause for shaping engine
+    await page.setContent(htmlContent, { waitUntil: ['networkidle0', 'load'], timeout: 60000 });
     await page.evaluateHandle('document.fonts.ready');
-    await new Promise(r => setTimeout(r, 1500));
+    // Long pause to let the Chromium font-shaping engine (HarfBuzz) settle complex diacritics
+    await new Promise(r => setTimeout(r, 2000));
 
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await browser.close();

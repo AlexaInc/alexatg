@@ -145,7 +145,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         const rColor = getTelegramDarkThemeColor(data.replysendercolor || 0);
         const rName = data.replySender ? generateNameHtml(data.replySender, rColor, 24 * scale) : '';
         const eStatus = data.customemojiid ? await getCustomEmojiBase64(data.customemojiid) : null;
-        const messageHtml = await processMessageHtml(data.message || '', data.messageEntities || []);
+        const messageHtml = await processMessageHtml(data.message || '', data.entities || []);
 
         return {
             avatar: `data:image/png;base64,${avatar.toString('base64')}`,

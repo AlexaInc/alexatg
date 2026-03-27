@@ -158,6 +158,10 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 
         .name-line { display: flex; align-items: center; margin-bottom: 12px; font-size: ${32 * scale}px; font-weight: bold; line-height: 1.1; }
         .msg { color: #fff; font-size: ${30 * scale}px; line-height: 1.4; word-break: break-word; }
+        
+        .reply { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 14px; border-left: 5px solid; margin-bottom: 12px; max-width: 100%; box-sizing: border-box; overflow: hidden; }
+        .r-name { font-weight: bold; margin-bottom: 4px; font-size: ${24 * scale}px; line-height: 1; }
+        .r-msg { color: #b0b0b0; font-size: ${22 * scale}px; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); }
     </style></head><body>
         <div id="capture">
             ${processedMessages.map(m => `
@@ -169,6 +173,14 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
                         ${m.showName && !m.isSticker ? `
                             <div class="name-line" style="color: ${m.nameColor}">${m.nameHtml}</div>
                         ` : ''}
+                        
+                        ${m.rNameHtml && !m.isSticker ? `
+                            <div class="reply" style="border-left-color: ${m.rColor}">
+                                <div class="r-name" style="color: ${m.rColor}">${m.rNameHtml}</div>
+                                <div class="r-msg">${escapeHtml(m.rMsg)}</div>
+                            </div>
+                        ` : ''}
+
                         ${m.mediaBase64 ? `<img src="${m.mediaBase64}" class="sticker" />` : ''}
                         ${m.messageHtml ? `<div class="msg">${m.messageHtml}</div>` : ''}
                     </div>

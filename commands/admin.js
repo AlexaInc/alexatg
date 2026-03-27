@@ -1438,22 +1438,9 @@ module.exports = function (bot, deps) {
       await bot.promoteChatMember(chatId, userbotId, { can_delete_messages: true }).catch(() => { });
 
       // Resolve target user to ensure Userbot has cached the entity
-      let targetEntity = targetUserId;
-      try {
-        targetEntity = await client.getEntity(targetUserId);
-      } catch (e) {
-        // Fallback: Check recent messages in the current chat to find the user in the cache
-        try {
-          console.log(`Direct resolution for ${targetUserId} failed, checking recent messages...`);
-          const recent = await client.getMessages(entity, { limit: 100 });
-          const found = recent.find(m => m.fromId && String(m.fromId.userId || m.fromId) === String(targetUserId));
-          if (found) {
-            targetEntity = await client.getEntity(found.fromId);
-          }
-        } catch (err) {
-          console.log(`Recent message scan also failed: ${err.message}`);
-        }
-      }
+      // Use the replied message ID (for /del all) or the current message ID (for /del me) as a direct reference
+      const referenceMsgId = isMe ? msg.message_id : (msg.reply_to_message?.message_id);
+      const targetEntity = await deps.handlers.resolveTargetEntity(client, entity, targetUserId, referenceMsgId);
 
       bot.sendMessage(chatId, `🧹 Deleting all messages from ${isMe ? "you" : `[${targetName}](tg://user?id=${targetUserId})`}...`, { parse_mode: 'Markdown' });
 

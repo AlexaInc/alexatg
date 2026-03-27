@@ -405,7 +405,8 @@ module.exports = {
   getUserbotClient,
   getJoinedEntity,
   setCachedUserbotId,
-  getCachedUserbotId
+  getCachedUserbotId,
+  resolveTargetEntity
 };
 
 let cachedUserbotId = null;
@@ -416,6 +417,55 @@ function setCachedUserbotId(id) {
 
 function getCachedUserbotId() {
   return cachedUserbotId;
+}
+
+/**
+ * Robustly resolves a Telegram entity (User) for the userbot.
+ * Useful when client.getEntity(id) fails due to missing entity cache.
+ */
+async function resolveTargetEntity(client, chatEntity, targetUserId, messageId = null) {
+  try {
+    // 1. Try direct resolution (works if already in cache)
+    return await client.getEntity(targetUserId);
+  } catch (err) {
+    console.log(`[Userbot] Direct resolution for ${targetUserId} failed: ${err.message}. Trying fallbacks...`);
+
+    // 2. If we have a messageId, try to fetch the sender from that specific message (Most reliable)
+    if (messageId) {
+      try {
+        console.log(`[Userbot] Attempting resolution via message ${messageId}...`);
+        const msgs = await client.getMessages(chatEntity, { ids: [Number(messageId)] });
+        if (msgs && msgs[0] && msgs[0].fromId) {
+          const sender = await client.getEntity(msgs[0].fromId);
+          if (sender) return sender;
+        }
+      } catch (e) {
+        console.log(`[Userbot] Message ID resolution failed: ${e.message}`);
+      }
+    }
+
+    // 3. Try scanning recent participants in the group
+    try {
+      const participants = await client.getParticipants(chatEntity, { limit: 100 });
+      const found = participants.find(p => String(p.id) === String(targetUserId));
+      if (found) return found;
+    } catch (e) {
+      console.log(`[Userbot] Participant scan failed: ${e.message}`);
+    }
+
+    // 4. Try scanning recent messages in the group
+    try {
+      const messages = await client.getMessages(chatEntity, { limit: 100 });
+      const foundMsg = messages.find(m => m.fromId && String(m.fromId.userId || m.fromId) === String(targetUserId));
+      if (foundMsg) {
+        return await client.getEntity(foundMsg.fromId);
+      }
+    } catch (e) {
+      console.log(`[Userbot] Message scan failed: ${e.message}`);
+    }
+
+    throw err;
+  }
 }
 
 async function getUserbotClient() {

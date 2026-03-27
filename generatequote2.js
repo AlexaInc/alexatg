@@ -26,6 +26,7 @@ const fontMap = {
     '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf': 'Noto Sans',
     '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf': 'Noto Sans',
     '/usr/share/fonts/truetype/noto/NotoSansSymbols-Regular.ttf': 'Noto Sans Symbols',
+    '/usr/share/fonts/truetype/noto/NotoSansMath-Regular.ttf': 'Noto Sans Math',
     '/usr/share/fonts/truetype/noto/NotoSansSC-Bold.otf': 'Noto Sans SC'
 };
 Object.entries(fontMap).forEach(([f, n]) => { if (fs.existsSync(f)) { try { registerFont(f, { family: n }); } catch (e) { } } });
@@ -68,6 +69,16 @@ function generateNameHtml(text, color, fontSize) {
     return res;
 }
 
+async function getEmojiStatusBuffer(eId) {
+    try {
+        const s = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/getCustomEmojiStickers`, { custom_emoji_ids: [eId] });
+        const st = s.data.result?.[0]; if (!st) return null;
+        const f = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/getFile`, { file_id: st.thumbnail?.file_id || st.file_id });
+        const i = await axios.get(`https://api.telegram.org/file/bot${BOT_TOKEN}/${f.data.result.file_path}`, { responseType: 'arraybuffer' });
+        return await sharp(i.data).resize(100, 100).png().toBuffer();
+    } catch (e) { return null; }
+}
+
 async function createDummyAvatarBuffer(f, l, color, scale) {
     const s = 140 * scale;
     const canvas = createCanvas(s, s); const ctx = canvas.getContext('2d');
@@ -93,7 +104,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     let processedRaw = await Promise.all(msgList.map(async (data) => {
         const username = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'User';
         const color = getTelegramDarkThemeColor(data.nameColorId);
-        const nameHtml = generateNameHtml(username, color, 28 * scale);
+        const nameHtml = generateNameHtml(username, color, 30 * scale);
         let avatar = data.inputImageBuffer ? await sharp(data.inputImageBuffer).png().toBuffer() : await createDummyAvatarBuffer(data.firstName, data.lastName, color, scale);
         let mB64 = null;
         if (data.mediaBuffer) { const b = await sharp(data.mediaBuffer).resize(400, 400, { fit: 'inside' }).png().toBuffer(); mB64 = `data:image/png;base64,${b.toString('base64')}`; }
@@ -119,22 +130,22 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const html = `<html><head>
         <style>
         body { margin: 0; padding: 0; font-family: ${FONT_STACK}; background: transparent; -webkit-font-smoothing: antialiased; }
-        #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${20 * scale}px; width: fit-content; }
+        #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${10 * scale}px; width: fit-content; }
         .group { display: flex; align-items: flex-end; }
         
-        .avatar-area { width: ${75 * scale}px; margin-right: ${12 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-        .avatar { width: ${75 * scale}px; height: ${75 * scale}px; border-radius: 50%; opacity: 1; -webkit-mask-image: linear-gradient(0deg, black, black); }
+        .avatar-area { width: ${85 * scale}px; margin-right: ${12 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+        .avatar { width: ${85 * scale}px; height: ${85 * scale}px; border-radius: 50%; opacity: 1; -webkit-mask-image: linear-gradient(0deg, black, black); }
         .hidden-avatar { opacity: 0; } 
 
-        .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${18 * scale}px ${25 * scale}px; position: relative; max-width: ${900 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${18 * scale}px ${25 * scale}px; position: relative; max-width: ${950 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .bubble-tail { border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; }
         .bubble-tail::after { content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
         
         .s-bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
         .s-bubble::after { display: none !important; }
 
-        .name-line { display: flex; align-items: center; margin-bottom: ${12 * scale}px; font-size: ${30 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.1; }
-        .msg { color: #fff; font-size: ${28 * scale}px; line-height: 1.4; word-break: break-word; }
+        .name-line { display: flex; align-items: center; margin-bottom: ${12 * scale}px; font-size: ${32 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.1; }
+        .msg { color: #fff; font-size: ${30 * scale}px; line-height: 1.4; word-break: break-word; }
         .sticker { max-width: ${400 * scale}px; max-height: ${400 * scale}px; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.4)); margin: ${8 * scale}px 0; border-radius: 12px; }
     </style></head><body>
         <div id="capture">
@@ -165,7 +176,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     await page.close();
 
     return await sharp(screenshot)
-        .trim(1) // Aggressive trim with 1px buffer
+        .trim({ threshold: 5 }) // CORRECTED FOR SHARP 0.33+
         .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 90 })
         .toBuffer();

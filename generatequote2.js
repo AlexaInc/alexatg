@@ -204,17 +204,22 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             font-family: ${FONT_STACK}; 
             background: transparent; 
             display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            gap: ${25 * scale}px; 
+            justify-content: center; /* Center horizontally in the viewport */
+            align-items: flex-start; /* Start from top */
+            min-height: fit-content;
+        }
+        #capture {
+            display: flex;
+            flex-direction: column;
+            gap: ${25 * scale}px;
             width: fit-content;
-            min-width: 100vw;
+            height: fit-content;
+            padding: ${10 * scale}px;
         }
         .msg-group { 
             display: flex; 
             align-items: flex-end; 
-            width: 100%;
-            justify-content: center;
+            width: fit-content;
         }
         .avatar { width: ${75 * scale}px; height: ${75 * scale}px; border-radius: 50%; margin-right: ${15 * scale}px; flex-shrink: 0; }
         .bubble { 
@@ -248,33 +253,53 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         .reply-sender { font-weight: bold; font-size: ${26 * scale}px; margin-bottom: ${5 * scale}px; }
         .reply-msg { color: #b0b0b0; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 92%, transparent 100%); font-size: ${24 * scale}px; }
     </style></head><body>
-        ${processedMessages.map(m => `
-            <div class="msg-group">
-                <img src="${m.avatar}" class="avatar" />
-                <div class="bubble">
-                    <div class="name-line" style="color: ${m.nameColor}">${m.nameHtml}${m.eStatus ? `<img src="${m.eStatus}" class="e-status" />` : ''}</div>
-                    ${m.rHtml ? `<div class="reply" style="border-left-color: ${m.rColor};"><div class="reply-sender" style="color: ${m.rColor}">${m.rHtml}</div><div class="reply-msg">${escapeHtml(m.pRMsg)}</div></div>` : ''}
-                    <div class="message">${m.highlighted}</div>
+        <div id="capture">
+            ${processedMessages.map(m => `
+                <div class="msg-group">
+                    <img src="${m.avatar}" class="avatar" />
+                    <div class="bubble">
+                        <div class="name-line" style="color: ${m.nameColor}">${m.nameHtml}${m.eStatus ? `<img src="${m.eStatus}" class="e-status" />` : ''}</div>
+                        ${m.rHtml ? `<div class="reply" style="border-left-color: ${m.rColor};"><div class="reply-sender" style="color: ${m.rColor}">${m.rHtml}</div><div class="reply-msg">${escapeHtml(m.pRMsg)}</div></div>` : ''}
+                        <div class="message">${m.highlighted}</div>
+                    </div>
                 </div>
-            </div>
-        `).join('')}
+            `).join('')}
+        </div>
     </body></html>`;
 
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu'] });
     const page = await browser.newPage();
-    await page.setViewport({ width: 3500, height: 10000 });
+    // Use a large width to allow centering, but the height will be determined by content
+    await page.setViewport({ width: 4000, height: 2000 });
     await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
-    const body = await page.$('body');
-    const screenshot = await body.screenshot({ omitBackground: true });
+
+    // Exact element to capture
+    const captureElement = await page.$('#capture');
+    const screenshot = await captureElement.screenshot({ omitBackground: true });
     await browser.close();
 
-    if (forceImage) return await sharp(screenshot).png().toBuffer();
+    if (forceImage) {
+        // Return PNG tightly cropped to #capture
+        return await sharp(screenshot).png().toBuffer();
+    }
 
-    const scaled = await sharp(screenshot).resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true }).toBuffer();
+    // For stickers, center the captured content in a 512x512 canvas
+    const scaled = await sharp(screenshot)
+        .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
+        .toBuffer();
+
     const meta = await sharp(scaled).metadata();
     const padX = Math.floor((512 - meta.width) / 2);
     const padY = Math.floor((512 - meta.height) / 2);
-    return await sharp(scaled).extend({ top: padY, bottom: padY, left: padX, right: padX, background: { r: 0, g: 0, b: 0, alpha: 0 } }).webp({ quality: 90 }).toBuffer();
+
+    return await sharp(scaled)
+        .extend({
+            top: padY, bottom: 512 - meta.height - padY,
+            left: padX, right: 512 - meta.width - padX,
+            background: { r: 0, g: 0, b: 0, alpha: 0 }
+        })
+        .webp({ quality: 90 })
+        .toBuffer();
 }
 
 module.exports = createImage;

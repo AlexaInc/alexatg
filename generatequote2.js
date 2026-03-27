@@ -44,7 +44,6 @@ Object.entries(fontMap).forEach(([fontPath, familyName]) => {
 });
 
 const FONT_STACK = "'Noto Sans', 'Noto Sans SC', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Sans Math', 'Arial Unicode MS', sans-serif";
-
 const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
 
 function getTelegramDarkThemeColor(id) { const map = new Map([[0, '#FF516A'], [1, '#FF9442'], [2, '#C66FFF'], [3, '#50D892'], [4, '#64D4F5'], [5, '#5095ED'], [6, '#FF66A6'], [7, '#FF8280'], [8, '#EDD64E'], [9, '#C66FFF']]); return map.get(id) || '#00ffff'; }
@@ -57,7 +56,8 @@ function createTextChunkImageBuffer(text, fontSize, color) {
     ctx.font = `bold ${fontSize}px ${FONT_STACK}`;
     const metrics = ctx.measureText(text);
     const width = Math.max(1, metrics.width);
-    const height = Math.max(1, fontSize * 1.5);
+    // Tighter height for cleaner alignment
+    const height = Math.max(1, fontSize * 1.25);
     const textCanvas = createCanvas(width, height);
     const tCtx = textCanvas.getContext('2d');
     tCtx.font = `bold ${fontSize}px ${FONT_STACK}`;
@@ -67,10 +67,6 @@ function createTextChunkImageBuffer(text, fontSize, color) {
     return textCanvas.toBuffer('image/png');
 }
 
-/**
- * The "LyoSU" secret: Render every grapheme (letter+symbols) into an image via node-canvas!
- * This ensures the character shape is LOCKED even if Puppeteer can't reach web servers.
- */
 function generateNameHtml(text, color, fontSize) {
     if (!text) return '';
     const segmenter = new Intl.Segmenter();
@@ -79,7 +75,7 @@ function generateNameHtml(text, color, fontSize) {
     for (const s of segments) {
         const char = s.segment;
         if (/\p{Emoji}/u.test(char)) {
-            html += `<span class="name-emoji">${escapeHtml(char)}</span>`;
+            html += `<span class="name-emoji" style="font-size: ${fontSize}px;">${escapeHtml(char)}</span>`;
         } else if (char.match(/^\s+$/)) {
             html += `<span style="white-space: pre;">${char}</span>`;
         } else {
@@ -108,15 +104,15 @@ async function getEmojiStatusBuffer(emojiId) {
 }
 
 async function createDummyAvatarBuffer(f, l, color, scale) {
-    const size = 140 * scale;
+    const size = 100 * scale; // Smaller base size for consistency
     const canvas = createCanvas(size, size);
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = color;
     ctx.beginPath(); ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#FFF';
-    ctx.font = `bold ${50 * scale}px ${FONT_STACK}`;
+    ctx.font = `bold ${35 * scale}px ${FONT_STACK}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const initial = ((f?.[0] || '') + (l?.[0] || '')).toUpperCase();
+    const initial = ((f?.[0] || '') + (l?.[0] || '')).toUpperCase().substring(0, 2);
     ctx.fillText(initial || '?', size / 2, size / 2);
     return canvas.toBuffer('image/png');
 }
@@ -136,7 +132,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const processedMessages = await Promise.all(msgList.map(async (data) => {
         const username = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'User';
         const color = getTelegramDarkThemeColor(data.nameColorId);
-        const nameHtml = generateNameHtml(username, color, 28 * scale);
+        const nameHtml = generateNameHtml(username, color, 24 * scale);
         let avatar = data.inputImageBuffer ? await sharp(data.inputImageBuffer).png().toBuffer() : await createDummyAvatarBuffer(data.firstName, data.lastName, color, scale);
         let mediaBase64 = null;
         if (data.mediaBuffer) {
@@ -145,7 +141,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         }
         const isSticker = !!data.mediaBuffer && (!data.message || data.message.trim() === '');
         const rColor = getTelegramDarkThemeColor(data.replysendercolor || 0);
-        const rNameHtml = data.replySender ? generateNameHtml(data.replySender, rColor, 24 * scale) : '';
+        const rNameHtml = data.replySender ? generateNameHtml(data.replySender, rColor, 20 * scale) : '';
         const eStatus = data.customemojiid ? await getEmojiStatusBuffer(data.customemojiid) : null;
 
         return {
@@ -158,28 +154,26 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         };
     }));
 
-    const googleFontsUrl = `https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&display=block`;
-
     const html = `<html><head>
-        <link href="${googleFontsUrl}" rel="stylesheet">
         <style>
-        body { margin: 0; padding: ${30 * scale}px; font-family: ${FONT_STACK}; background: transparent; display: flex;-webkit-font-smoothing: antialiased; }
+        body { margin: 0; padding: ${40 * scale}px; font-family: ${FONT_STACK}; background: transparent; display: flex; -webkit-font-smoothing: antialiased; }
         #capture { display: flex; flex-direction: column; gap: ${25 * scale}px; width: fit-content; }
         .group { display: flex; align-items: flex-end; }
-        .avatar { width: ${45 * scale}px; height: ${45 * scale}px; border-radius: 50%; margin-right: ${12 * scale}px; flex-shrink: 0; }
-        .s-avatar { width: ${30 * scale}px; height: ${30 * scale}px; margin-bottom: 0; }
-        .bubble { background: #2a2233; border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; padding: ${18 * scale}px ${25 * scale}px; position: relative; max-width: ${800 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .avatar { width: ${38 * scale}px; height: ${38 * scale}px; border-radius: 50%; margin-right: ${10 * scale}px; flex-shrink: 0; }
+        .s-avatar { width: ${28 * scale}px; height: ${28 * scale}px; }
+        .bubble { background: #2a2233; border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; padding: ${12 * scale}px ${20 * scale}px; position: relative; max-width: ${800 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .bubble::after { content: ''; position: absolute; bottom: 0; left: -${20 * scale}px; width: ${20 * scale}px; height: ${20 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M20 0 V20 H0 C10 20 20 10 20 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
         .s-bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
         .s-bubble::after { display: none !important; }
-        .name-line { display: flex; align-items: center; margin-bottom: ${10 * scale}px; font-size: ${28 * scale}px; white-space: nowrap; }
+        .name-line { display: flex; align-items: center; margin-bottom: ${8 * scale}px; font-size: ${24 * scale}px; font-weight: bold; white-space: nowrap; }
         .name-chunk { height: 1em; vertical-align: middle; }
-        .e-status { height: 1.2em; width: 1.2em; border-radius: 5px; margin-left: ${8 * scale}px; }
-        .msg { color: #fff; font-size: ${26 * scale}px; line-height: 1.4; word-break: break-word; }
-        .sticker { max-width: ${350 * scale}px; max-height: ${350 * scale}px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5)); border-radius: 10px; }
-        .reply { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 10px; border-left: 4px solid; margin-bottom: 10px; }
-        .r-name { font-weight: bold; margin-bottom: 3px; font-size: ${22 * scale}px; }
-        .r-msg { color: #b0b0b0; font-size: ${20 * scale}px; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); }
+        .name-emoji { display: inline-block; vertical-align: middle; line-height: 1; }
+        .e-status { height: 1.25em; width: 1.25em; border-radius: 20%; margin-left: ${8 * scale}px; }
+        .msg { color: #fff; font-size: ${24 * scale}px; line-height: 1.4; word-break: break-word; }
+        .sticker { max-width: ${350 * scale}px; max-height: ${350 * scale}px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5)); border-radius: 10px; margin: ${5 * scale}px 0; }
+        .reply { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 8px 12px; border-left: 4px solid; margin-bottom: 8px; max-width: 100%; box-sizing: border-box; }
+        .r-name { font-weight: bold; margin-bottom: 3px; font-size: ${20 * scale}px; }
+        .r-msg { color: #b0b0b0; font-size: ${18 * scale}px; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); }
     </style></head><body>
         <div id="capture">
             ${processedMessages.map(m => `

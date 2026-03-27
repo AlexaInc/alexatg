@@ -12,34 +12,27 @@ const axios = require('axios');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
 
-// --- FONT STACK ---
-const FONT_STACK = "'Noto Sans', 'Inter', 'Roboto', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Android Emoji', sans-serif";
+// Comprehensive font stack for global coverage
+const FONT_STACK = "'Noto Sans', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Sans Math', 'Noto Color Emoji', 'Inter', 'Roboto', 'Segoe UI', 'Segoe UI Emoji', sans-serif";
 
-// --- HELPER FUNCTIONS ---
 function getTelegramDarkThemeColor(id) { const map = new Map([[0, '#FF516A'], [1, '#FF9442'], [2, '#C66FFF'], [3, '#50D892'], [4, '#64D4F5'], [5, '#5095ED'], [6, '#FF66A6'], [7, '#FF8280'], [8, '#EDD64E'], [9, '#C66FFF']]); return map.get(id) || '#00ffff'; }
 
 async function createDummyAvatarBuffer(f, l, c, scale = 1) {
     const avatarSize = 140 * scale;
     let initialText = '';
     const firstChar = f ? (Array.from(f)[0] || '') : '';
-    const isFirstCharEmoji = /\p{Emoji}/u.test(firstChar);
-    if (isFirstCharEmoji) initialText = firstChar; else initialText = (firstChar + (l ? (Array.from(l)[0] || '') : '')).toUpperCase().trim();
+    if (/\p{Emoji}/u.test(firstChar)) initialText = firstChar; else initialText = (firstChar + (l ? (Array.from(l)[0] || '') : '')).toUpperCase().trim();
     if (!initialText) initialText = '?';
-    const graphemeCount = Array.from(initialText).length;
-    const fontSize = graphemeCount === 1 ? 72 * scale : 48 * scale;
-
-    const htmlContent = `<html><head>
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Roboto:wght@700&display=swap" rel="stylesheet">
-        <style>body { margin: 0; padding: 0; width: ${avatarSize}px; height: ${avatarSize}px; font-family: ${FONT_STACK}; } #avatar { width: 100%; height: 100%; background-color: ${c}; border-radius: 50%; display: flex; justify-content: center; align-items: center; color: #FFF; font-size: ${fontSize}px; font-weight: bold; }</style></head><body><div id="avatar">${escapeHtml(initialText)}</div></body></html>`;
+    const fontSize = Array.from(initialText).length === 1 ? 72 * scale : 48 * scale;
+    const html = `<html><head><style>body { margin: 0; padding: 0; width: ${avatarSize}px; height: ${avatarSize}px; font-family: ${FONT_STACK}; } #avatar { width: 100%; height: 100%; background-color: ${c}; border-radius: 50%; display: flex; justify-content: center; align-items: center; color: #FFF; font-size: ${fontSize}px; font-weight: bold; }</style></head><body><div id="avatar">${escapeHtml(initialText)}</div></body></html>`;
 
     let browser;
     try {
         browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu'] });
         const page = await browser.newPage();
         await page.setViewport({ width: avatarSize, height: avatarSize });
-        await page.setContent(htmlContent);
-        const element = await page.$('#avatar');
-        return await element.screenshot({ omitBackground: true });
+        await page.setContent(html);
+        return await (await page.$('#avatar')).screenshot({ omitBackground: true });
     } finally { if (browser) await browser.close(); }
 }
 
@@ -58,9 +51,8 @@ async function getEmojiStatusBuffer(emojiId) {
             if (!file_id) return null;
             const fileResponse = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/getFile`, { file_id }, { family: 4 });
             const imageResponse = await axios.get(`https://api.telegram.org/file/bot${BOT_TOKEN}/${fileResponse.data.result.file_path}`, { responseType: 'arraybuffer', family: 4 });
-            const pngBuffer = await sharp(imageResponse.data).resize(100, 100).png().toBuffer();
-            fs.writeFileSync(cachePath, pngBuffer);
-            return pngBuffer;
+            const png = await sharp(imageResponse.data).resize(100, 100).png().toBuffer();
+            fs.writeFileSync(cachePath, png); return png;
         } catch (e) { await new Promise(r => setTimeout(r, 500)); }
     }
     return null;
@@ -71,12 +63,12 @@ function escapeHtml(text) { return text ? text.toString().replace(/&/g, "&amp;")
 function highlightTextPatterns(wrappedText) {
     const patternRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|\/\w+)/g;
     const parts = wrappedText.split(patternRegex).filter(Boolean);
-    let outputHtml = '';
+    let output = '';
     for (const part of parts) {
-        if (part.match(/^(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|(\/)\w+)$/)) outputHtml += `<span style="color: #6ab8ed; text-decoration: underline;">${escapeHtml(part)}</span>`;
-        else outputHtml += escapeHtml(part).replace(/\n/g, '<br/>');
+        if (part.match(/^(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|(\/)\w+)$/)) output += `<span style="color: #6ab8ed; text-decoration: underline;">${escapeHtml(part)}</span>`;
+        else output += escapeHtml(part).replace(/\n/g, '<br/>');
     }
-    return outputHtml;
+    return output;
 }
 
 async function renderMessageHTML(text, entities) {
@@ -93,9 +85,7 @@ async function renderMessageHTML(text, entities) {
         let p = '';
         if (e.type === 'custom_emoji') {
             const buf = await getEmojiStatusBuffer(e.custom_emoji_id);
-            p = buf ? `<img src="data:image/png;base64,${buf.toString('data:image/png;base64,').length > 50 ? buf.toString('base64') : ''}" class="message-custom-emoji" />` : escapeHtml(eText);
-            // Re-fetch logic if base64 failed or small
-            if (buf) p = `<img src="data:image/png;base64,${buf.toString('base64')}" class="message-custom-emoji" />`;
+            p = buf ? `<img src="data:image/png;base64,${buf.toString('base64')}" class="message-custom-emoji" />` : escapeHtml(eText);
         } else if (['url', 'mention', 'bot_command', 'mention_name', 'text_link'].includes(e.type)) p = `<span style="color: #6ab8ed; text-decoration: underline;">${escapeHtml(eText)}</span>`;
         else if (e.type === 'bold') p = `<b>${escapeHtml(eText)}</b>`;
         else if (e.type === 'italic') p = `<i>${escapeHtml(eText)}</i>`;
@@ -130,8 +120,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         };
     }));
 
+    // Added all required Noto fonts for symbols and global characters
     const htmlContent = `<html><head>
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Roboto:wght@700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Noto+Sans+JP:wght@700&family=Noto+Sans+KR:wght@700&family=Noto+Sans+SC:wght@700&family=Noto+Sans+TC:wght@700&family=Noto+Sans+Symbols:wght@700&family=Noto+Sans+Symbols+2:wght@700&family=Noto+Sans+Math:wght@700&family=Noto+Emoji:wght@700&display=swap" rel="stylesheet">
         <style>
         body { margin: 0; padding: ${40 * scale}px; font-family: ${FONT_STACK}; background: transparent; display: flex; justify-content: center; align-items: flex-start; }
         #capture { display: flex; flex-direction: column; gap: ${25 * scale}px; width: fit-content; padding: ${10 * scale}px; }
@@ -166,11 +157,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu'] });
     const page = await browser.newPage();
-    await page.setViewport({ width: 4000, height: 2000 });
-    // Use WaitUntil networkidle2 to ensure Google Fonts are loaded
+    await page.setViewport({ width: 4000, height: 4000 });
     await page.setContent(htmlContent, { waitUntil: 'networkidle2' });
-    const captureElement = await page.$('#capture');
-    const screenshot = await captureElement.screenshot({ omitBackground: true });
+    const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await browser.close();
 
     if (forceImage) return await sharp(screenshot).png().toBuffer();

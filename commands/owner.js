@@ -170,10 +170,21 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
         msgtextt = content;
       }
 
+      let entities = [];
+      if (!hasValidPayload) {
+        if (msgtextt) {
+          const originalOffset = msg.text.indexOf(msgtextt);
+          if (originalOffset !== -1) {
+            entities = (msg.entities || []).filter(e => e.offset >= originalOffset).map(e => ({ ...e, offset: e.offset - originalOffset }));
+          }
+        }
+      }
+
       let userphoto = userphotourl ? await downloadImage(userphotourl) : null;
       const stickerBuffer = await createQuoteSticker(
         firstName, lastName, chat.emoji_status_custom_emoji_id, msgtextt,
-        chat.accent_color_id, userphoto, replysender, replycontent, replysendercolor
+        chat.accent_color_id, userphoto, replysender, replycontent, replysendercolor,
+        entities
       );
 
       if (stickerBuffer) {
@@ -210,10 +221,24 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
         replysendercolor = rchat.accent_color_id;
       }
 
+      let text = msg.text.split(' ').slice(1).join(' ');
+      let entities = [];
+
+      if (text) {
+        const originalOffset = msg.text.indexOf(text);
+        if (originalOffset !== -1) {
+          entities = (msg.entities || []).filter(e => e.offset >= originalOffset).map(e => ({ ...e, offset: e.offset - originalOffset }));
+        }
+      } else if (msg.reply_to_message) {
+        text = msg.reply_to_message.text || msg.reply_to_message.caption || '';
+        entities = msg.reply_to_message.entities || msg.reply_to_message.caption_entities || [];
+      }
+
       const stickerBuffer = await createQuoteSticker(
         from.first_name || '', from.last_name || '', chat.emoji_status_custom_emoji_id,
-        msg.text.split(' ').slice(1).join(' ') || ' ', chat.accent_color_id, userPhoto,
-        replysender, replycontent, replysendercolor
+        text || ' ', chat.accent_color_id, userPhoto,
+        replysender, replycontent, replysendercolor,
+        entities
       );
 
       await bot.sendSticker(msg.chat.id, stickerBuffer, {

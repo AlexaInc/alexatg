@@ -110,7 +110,19 @@ module.exports = function (bot, deps) {
         replySenderColor = rChat.accent_color_id;
       }
 
-      const text = msg.text.split(/\s+/).slice(1).join(' ') || (msg.reply_to_message ? msg.reply_to_message.text : '');
+      let text = msg.text.split(/\s+/).slice(1).join(' ');
+      let entities = [];
+
+      if (text) {
+        const originalOffset = msg.text.indexOf(text);
+        if (originalOffset !== -1) {
+          entities = (msg.entities || []).filter(e => e.offset >= originalOffset).map(e => ({ ...e, offset: e.offset - originalOffset }));
+        }
+      } else if (msg.reply_to_message) {
+        text = msg.reply_to_message.text || msg.reply_to_message.caption || '';
+        entities = msg.reply_to_message.entities || msg.reply_to_message.caption_entities || [];
+      }
+
       if (!text) return;
 
       const stickerBuffer = await createQuoteSticker(
@@ -122,7 +134,8 @@ module.exports = function (bot, deps) {
         userPhoto,
         replymsgUser,
         replymsgContent,
-        replySenderColor
+        replySenderColor,
+        entities
       );
 
       const fileOptions = {
@@ -136,7 +149,89 @@ module.exports = function (bot, deps) {
 
     } catch (err) {
       console.error("Quote command error:", err);
-      bot.sendMessage(chatId, "❌ Failed to generate quote sticker.");
+    }
+  });
+
+  bot.onText(/^\/q(?:\s|$|@)/, async (msg) => {
+    if (!deps.handlers.checkCommand(msg, '/q', deps.BOT_USERNAME)) return;
+    const chatId = msg.chat.id;
+    if (!msg.reply_to_message) {
+      return bot.sendMessage(chatId, "Reply to a message with `/q` to create a quote sticker. Use `/q r` to include the reply context.", { parse_mode: 'Markdown' });
+    }
+
+    const targetMsg = msg.reply_to_message;
+    const args = msg.text.split(/\s+/).slice(1).map(a => a.toLowerCase());
+    const withReply = args.includes('r');
+
+    try {
+      const from = targetMsg.from;
+      const { getProfilePhoto, downloadImage, getUserbotClient, getJoinedEntity } = deps.handlers;
+
+      const userPhotourl = await getProfilePhoto(bot, from.id);
+      const userPhoto = userPhotourl ? await downloadImage(userPhotourl) : null;
+      const chat = await bot.getChat(from.id).catch(() => ({}));
+
+      let replymsgUser = null;
+      let replymsgContent = null;
+      let replySenderColor = null;
+
+      if (withReply) {
+        const client = await getUserbotClient();
+        if (client) {
+          try {
+            const chatEntity = await getJoinedEntity(client, bot, chatId);
+            const messages = await client.getMessages(chatEntity, { ids: [targetMsg.message_id] });
+            const fullTargetMsg = messages[0];
+
+            if (fullTargetMsg && fullTargetMsg.replyTo) {
+              const gfId = fullTargetMsg.replyTo.replyToMsgId;
+              const gfMsgs = await client.getMessages(chatEntity, { ids: [gfId] });
+              const gfMsg = gfMsgs[0];
+
+              if (gfMsg) {
+                const gfSender = gfMsg.sender;
+                replymsgUser = (gfSender ? (gfSender.firstName || '') + ' ' + (gfSender.lastName || '') : 'Unknown').trim() || 'Deleted User';
+                replymsgContent = gfMsg.message || gfMsg.caption || 'Media';
+                replySenderColor = (gfSender && gfSender.color) ? gfSender.color.colorId : (Math.floor(Math.random() * 7));
+              }
+            }
+          } catch (e) {
+            console.warn("Userbot failed to fetch GF message:", e.message);
+          } finally {
+            await client.disconnect().catch(() => { });
+          }
+        }
+      } else if (targetMsg.reply_to_message) {
+        // Fallback to bot API if bot happens to have the replied message in cache
+        const rFrom = targetMsg.reply_to_message.from;
+        replymsgUser = `${rFrom.first_name} ${rFrom.last_name || ''}`.trim() || 'Unknown';
+        replymsgContent = targetMsg.reply_to_message.text || targetMsg.reply_to_message.caption || null;
+        const rChat = await bot.getChat(rFrom.id).catch(() => ({}));
+        replySenderColor = rChat.accent_color_id;
+      }
+
+      const text = targetMsg.text || targetMsg.caption || '';
+      const entities = targetMsg.entities || targetMsg.caption_entities || [];
+
+      const stickerBuffer = await createQuoteSticker(
+        from.first_name || '',
+        from.last_name || '',
+        chat.emoji_status_custom_emoji_id,
+        text,
+        chat.accent_color_id,
+        userPhoto,
+        replymsgUser,
+        replymsgContent,
+        replySenderColor,
+        entities
+      );
+
+      await bot.sendSticker(chatId, stickerBuffer, {
+        reply_to_message_id: msg.message_id
+      }, { filename: 'quote.webp', contentType: 'image/webp' });
+
+    } catch (err) {
+      console.error("Q command error:", err);
     }
   });
 

@@ -355,31 +355,26 @@ function highlightTextPatterns(wrappedText) {
 
 
 async function renderMessageHTML(text, entities) {
-    const sanitizedText = String(text || '');
+    const rawText = String(text || '');
     if (!entities || !Array.isArray(entities) || entities.length === 0) {
-        return highlightTextPatterns(sanitizedText);
+        return highlightTextPatterns(rawText);
     }
 
-    // Sort entities by offset
     const sortedEntities = [...entities].sort((a, b) => a.offset - b.offset);
     let html = '';
     let lastOffset = 0;
 
     for (const entity of sortedEntities) {
-        // Skip or clip entities that are outside the text bounds
-        if (entity.offset >= sanitizedText.length) continue;
-
-        // Ensure offsets are non-negative and sequential
+        if (entity.offset >= rawText.length) continue;
         const start = Math.max(0, entity.offset);
-        if (start < lastOffset) continue; // Skip overlapping entities for now
+        if (start < lastOffset) continue;
 
-        // Add plain text before the entity
         if (start > lastOffset) {
-            html += highlightTextPatterns(sanitizedText.substring(lastOffset, start));
+            html += highlightTextPatterns(rawText.substring(lastOffset, start));
         }
 
-        const end = Math.min(start + entity.length, sanitizedText.length);
-        const entityText = sanitizedText.substring(start, end);
+        const end = Math.min(start + entity.length, rawText.length);
+        const entityText = rawText.substring(start, end);
         let partHtml = '';
 
         if (entity.type === 'custom_emoji') {
@@ -391,8 +386,7 @@ async function renderMessageHTML(text, entities) {
                 partHtml = escapeHtml(entityText);
             }
         } else if (['url', 'mention', 'bot_command', 'mention_name', 'text_link'].includes(entity.type)) {
-            const highlightColor = '#6ab8ed';
-            partHtml = `<span style="color: ${highlightColor}; text-decoration: underline;">${escapeHtml(entityText)}</span>`;
+            partHtml = `<span style="color: #6ab8ed; text-decoration: underline;">${escapeHtml(entityText)}</span>`;
         } else if (entity.type === 'bold') {
             partHtml = `<b>${escapeHtml(entityText)}</b>`;
         } else if (entity.type === 'italic') {
@@ -407,17 +401,11 @@ async function renderMessageHTML(text, entities) {
         lastOffset = end;
     }
 
-    // Add any remaining text
-    if (lastOffset < sanitizedText.length) {
-        html += highlightTextPatterns(sanitizedText.substring(lastOffset));
+    if (lastOffset < rawText.length) {
+        html += highlightTextPatterns(rawText.substring(lastOffset));
     }
 
-    // Fallback if somehow html is still empty but text was not
-    if (!html && sanitizedText) {
-        return highlightTextPatterns(sanitizedText);
-    }
-
-    return html;
+    return html || highlightTextPatterns(rawText);
 }
 
 
@@ -737,28 +725,16 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const browser = await puppeteer.launch(launchOptions);
     const page = await browser.newPage();
     await page.setViewport({ width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT });
-    // Wait until dom is loaded (reverted from networkidle0)
+    // Wait until dom is loaded
     await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
 
-    // *** FIX: Smart function to dynamically set message max-width ***
-    await page.evaluate((defaultMessageWidth) => {
-        // Measure the whole name line now that it contains images/spans
-        const nameWidth = document.querySelector('.name-line')?.scrollWidth || 0;
-
-        const replySenderElement = document.querySelector('.reply-sender');
-        const replyWidth = replySenderElement?.scrollWidth || 0;
-
-        // Content width is the wider of the name line or reply sender
-        const contentWidth = Math.max(nameWidth, replyWidth);
-
-        // Message max-width is the wider of the content width or the default
-        const newMaxWidth = Math.max(contentWidth, defaultMessageWidth);
-
+    // Use a fixed max-width for the message element to ensure visibility
+    await page.evaluate((maxWidth) => {
         const messageElement = document.querySelector('.message');
         if (messageElement) {
-            messageElement.style.maxWidth = newMaxWidth + 'px';
+            messageElement.style.maxWidth = maxWidth + 'px';
         }
-    }, DEFAULT_MESSAGE_MAX_WIDTH); // Pass only the default width
+    }, DEFAULT_MESSAGE_MAX_WIDTH);
 
     const element = await page.$('#capture');
     const finalPngBuffer = await element.screenshot({ omitBackground: true });

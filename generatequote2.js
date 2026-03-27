@@ -12,8 +12,8 @@ const axios = require('axios');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
 
-// Use a broader font stack for multi-language and special chars
-const FONT_STACK = "'Segoe UI', 'Roboto', 'Noto Sans', 'Noto Sans Sinhala', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Color Emoji', sans-serif";
+// --- FONT STACK ---
+const FONT_STACK = "'Noto Sans', 'Inter', 'Roboto', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Android Emoji', sans-serif";
 
 // --- HELPER FUNCTIONS ---
 function getTelegramDarkThemeColor(id) { const map = new Map([[0, '#FF516A'], [1, '#FF9442'], [2, '#C66FFF'], [3, '#50D892'], [4, '#64D4F5'], [5, '#5095ED'], [6, '#FF66A6'], [7, '#FF8280'], [8, '#EDD64E'], [9, '#C66FFF']]); return map.get(id) || '#00ffff'; }
@@ -28,7 +28,9 @@ async function createDummyAvatarBuffer(f, l, c, scale = 1) {
     const graphemeCount = Array.from(initialText).length;
     const fontSize = graphemeCount === 1 ? 72 * scale : 48 * scale;
 
-    const htmlContent = `<html><head><style>body { margin: 0; padding: 0; width: ${avatarSize}px; height: ${avatarSize}px; font-family: ${FONT_STACK}; } #avatar { width: 100%; height: 100%; background-color: ${c}; border-radius: 50%; display: flex; justify-content: center; align-items: center; color: #FFF; font-size: ${fontSize}px; font-weight: bold; }</style></head><body><div id="avatar">${escapeHtml(initialText)}</div></body></html>`;
+    const htmlContent = `<html><head>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Roboto:wght@700&display=swap" rel="stylesheet">
+        <style>body { margin: 0; padding: 0; width: ${avatarSize}px; height: ${avatarSize}px; font-family: ${FONT_STACK}; } #avatar { width: 100%; height: 100%; background-color: ${c}; border-radius: 50%; display: flex; justify-content: center; align-items: center; color: #FFF; font-size: ${fontSize}px; font-weight: bold; }</style></head><body><div id="avatar">${escapeHtml(initialText)}</div></body></html>`;
 
     let browser;
     try {
@@ -91,7 +93,9 @@ async function renderMessageHTML(text, entities) {
         let p = '';
         if (e.type === 'custom_emoji') {
             const buf = await getEmojiStatusBuffer(e.custom_emoji_id);
-            p = buf ? `<img src="data:image/png;base64,${buf.toString('base64')}" class="message-custom-emoji" />` : escapeHtml(eText);
+            p = buf ? `<img src="data:image/png;base64,${buf.toString('data:image/png;base64,').length > 50 ? buf.toString('base64') : ''}" class="message-custom-emoji" />` : escapeHtml(eText);
+            // Re-fetch logic if base64 failed or small
+            if (buf) p = `<img src="data:image/png;base64,${buf.toString('base64')}" class="message-custom-emoji" />`;
         } else if (['url', 'mention', 'bot_command', 'mention_name', 'text_link'].includes(e.type)) p = `<span style="color: #6ab8ed; text-decoration: underline;">${escapeHtml(eText)}</span>`;
         else if (e.type === 'bold') p = `<b>${escapeHtml(eText)}</b>`;
         else if (e.type === 'italic') p = `<i>${escapeHtml(eText)}</i>`;
@@ -126,7 +130,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         };
     }));
 
-    const htmlContent = `<html><head><style>
+    const htmlContent = `<html><head>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Roboto:wght@700&display=swap" rel="stylesheet">
+        <style>
         body { margin: 0; padding: ${40 * scale}px; font-family: ${FONT_STACK}; background: transparent; display: flex; justify-content: center; align-items: flex-start; }
         #capture { display: flex; flex-direction: column; gap: ${25 * scale}px; width: fit-content; padding: ${10 * scale}px; }
         .msg-group { display: flex; align-items: flex-end; width: fit-content; }
@@ -161,7 +167,8 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu'] });
     const page = await browser.newPage();
     await page.setViewport({ width: 4000, height: 2000 });
-    await page.setContent(htmlContent);
+    // Use WaitUntil networkidle2 to ensure Google Fonts are loaded
+    await page.setContent(htmlContent, { waitUntil: 'networkidle2' });
     const captureElement = await page.$('#capture');
     const screenshot = await captureElement.screenshot({ omitBackground: true });
     await browser.close();

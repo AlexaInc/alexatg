@@ -12,16 +12,17 @@ const axios = require('axios');
 // --- CONFIGURATION ---
 const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
 
-// Quotly-style Font Stack
-const FONT_STACK = "'Noto Sans', 'Inter', 'Roboto', 'Segoe UI', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Sans Math', sans-serif";
+// Ultimate Font Stack
+const FONT_STACK = "'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Noto Sans Math', 'Roboto', sans-serif";
 
 function getTelegramDarkThemeColor(id) { const map = new Map([[0, '#FF516A'], [1, '#FF9442'], [2, '#C66FFF'], [3, '#50D892'], [4, '#64D4F5'], [5, '#5095ED'], [6, '#FF66A6'], [7, '#FF8280'], [8, '#EDD64E'], [9, '#C66FFF']]); return map.get(id) || '#00ffff'; }
 
 async function createDummyAvatarBuffer(f, l, c, scale = 1) {
     const avatarSize = 140 * scale;
     let initialText = '';
-    const firstChar = f ? (Array.from(f)[0] || '') : '';
-    if (/\p{Emoji}/u.test(firstChar)) initialText = firstChar; else initialText = (firstChar + (l ? (Array.from(l)[0] || '') : '')).toUpperCase().trim();
+    const segmenter = new Intl.Segmenter();
+    const firstChar = f ? ([...segmenter.segment(f)][0]?.segment || '') : '';
+    if (/\p{Emoji}/u.test(firstChar)) initialText = firstChar; else initialText = (firstChar + (l ? ([...segmenter.segment(l)][0]?.segment || '') : '')).toUpperCase().trim();
     if (!initialText) initialText = '?';
     const fontSize = Array.from(initialText).length === 1 ? 72 * scale : 48 * scale;
     const html = `<html><head><style>body { margin: 0; padding: 0; width: ${avatarSize}px; height: ${avatarSize}px; font-family: ${FONT_STACK}; } #avatar { width: 100%; height: 100%; background-color: ${c}; border-radius: 50%; display: flex; justify-content: center; align-items: center; color: #FFF; font-size: ${fontSize}px; font-weight: bold; }</style></head><body><div id="avatar">${escapeHtml(initialText)}</div></body></html>`;
@@ -104,8 +105,13 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const scale = 4;
     const forceImage = options.forceImage || messageDataList.length >= 4;
 
+    const segmenter = new Intl.Segmenter();
+
     const processedMessages = await Promise.all(messageDataList.map(async (data) => {
         const username = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'Unknown';
+        // Improved splitting to keep combining marks together
+        const nameSegments = [...segmenter.segment(username)].map(s => escapeHtml(s.segment)).join('');
+
         const nameColor = getTelegramDarkThemeColor(data.nameColorId);
         const highlighted = await renderMessageHTML(data.message, data.entities || data.messageEntities || []);
         let rColorId = data.replysendercolor || 0; const rColor = getTelegramDarkThemeColor(rColorId);
@@ -123,7 +129,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 
         return {
             avatar: `data:image/png;base64,${avatar.toString('base64')}`,
-            username,
+            username: nameSegments,
             eStatus: eStatus ? `data:image/png;base64,${eStatus.toString('base64')}` : null,
             replySender: data.replySender, pRMsg, highlighted, nameColor, rColor,
             mediaBase64,
@@ -131,7 +137,6 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         };
     }));
 
-    // Multi-subset Google Fonts request for maximal character coverage
     const googleFontsUrl = `https://fonts.googleapis.com/css2?family=Noto+Sans:wght@700&family=Noto+Sans+Symbols:wght@700&family=Noto+Sans+Symbols+2:wght@700&family=Noto+Sans+Math:wght@700&family=Noto+Emoji:wght@700&display=block`;
 
     const htmlContent = `<html lang="en"><head>
@@ -140,34 +145,40 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         body { 
             margin: 0; padding: ${40 * scale}px; font-family: ${FONT_STACK}; background: transparent; 
             display: flex; justify-content: center; align-items: flex-start; 
-            text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeSpeed; font-feature-settings: "kern" 1, "liga" 0, "calt" 0;
+            -webkit-font-smoothing: antialiased;
         }
         #capture { display: flex; flex-direction: column; gap: ${25 * scale}px; width: fit-content; padding: ${10 * scale}px; }
-        .msg-group { display: flex; align-items: flex-end; width: fit-content; }
-        .avatar { width: ${75 * scale}px; height: ${75 * scale}px; border-radius: 50%; margin-right: ${15 * scale}px; flex-shrink: 0; align-self: flex-start; margin-top: 10px; }
+        .msg-group { display: flex; align-items: flex-end; width: fit-content; position: relative; }
         
-        .bubble { background: #2a2233; border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; padding: ${20 * scale}px ${30 * scale}px; position: relative; min-width: ${250 * scale}px; max-width: ${850 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        /* Normal Avatar Aligned to bottom of bubble */
+        .avatar { width: ${45 * scale}px; height: ${45 * scale}px; border-radius: 50%; margin-right: ${12 * scale}px; flex-shrink: 0; position: relative; bottom: ${5 * scale}px; }
+        
+        .bubble { background: #2a2233; border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; padding: ${15 * scale}px ${25 * scale}px; position: relative; min-width: ${220 * scale}px; max-width: ${850 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .bubble::after { content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
         
-        .naked-sticker { background: transparent !important; border-radius: 0; padding: 0; box-shadow: none !important; min-width: 0; }
+        /* Naked Sticker Styling */
+        .naked-sticker { background: transparent !important; border-radius: 0; padding: 0 !important; box-shadow: none !important; min-width: 0 !important; }
         .naked-sticker::after { display: none !important; }
+        .naked-avatar { width: ${35 * scale}px; height: ${35 * scale}px; margin-right: ${8 * scale}px; bottom: 0; align-self: center; }
 
-        .name-line { display: flex; align-items: center; margin-bottom: ${14 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.2; font-variant-ligatures: none; }
-        .e-status { width: ${28 * 1.5 * scale}px; height: ${28 * 1.5 * scale}px; margin-left: ${10 * scale}px; border-radius: 15%; }
-        .message { font-size: ${28 * scale}px; line-height: 1.5; color: #fefcff; word-break: break-word; }
-        .message-sticker { max-width: ${300 * scale}px; max-height: ${300 * scale}px; display: block; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.5)); }
-        .reply { background: rgba(255,255,255,0.06); border-radius: ${12 * scale}px; position: relative; padding: ${10 * scale}px ${12 * scale}px ${10 * scale}px ${14 * scale}px; margin-bottom: ${12 * scale}px; border-left: ${5 * scale}px solid; }
-        .reply-sender { font-weight: bold; font-size: ${26 * scale}px; margin-bottom: ${5 * scale}px; }
-        .reply-msg { color: #b0b0b0; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 92%, transparent 100%); font-size: ${24 * scale}px; }
+        .name-line { display: flex; align-items: center; margin-bottom: ${10 * scale}px; font-size: ${24 * scale}px; font-weight: bold; white-space: nowrap; line-height: 1.1; }
+        .e-status { width: ${20 * 1.5 * scale}px; height: ${20 * 1.5 * scale}px; margin-left: ${8 * scale}px; border-radius: 15%; }
+        .message { font-size: ${26 * scale}px; line-height: 1.4; color: #fefcff; word-break: break-word; }
+        .message-sticker { max-width: ${350 * scale}px; max-height: ${350 * scale}px; display: block; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.4)); margin: ${5 * scale}px 0; border-radius: 12px; }
+        
+        .reply { background: rgba(255,255,255,0.06); border-radius: ${12 * scale}px; position: relative; padding: ${8 * scale}px ${10 * scale}px ${8 * scale}px ${12 * scale}px; margin-bottom: ${10 * scale}px; border-left: ${4 * scale}px solid; }
+        .reply-sender { font-weight: bold; font-size: ${22 * scale}px; margin-bottom: ${4 * scale}px; }
+        .reply-msg { color: #b0b0b0; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 92%, transparent 100%); font-size: ${20 * scale}px; }
     </style></head><body>
         <div id="capture">
             ${processedMessages.map(m => `
                 <div class="msg-group">
-                    <img src="${m.avatar}" class="avatar" />
+                    <img src="${m.avatar}" class="avatar ${m.isStickerOnly ? 'naked-avatar' : ''}" />
                     <div class="bubble ${m.isStickerOnly ? 'naked-sticker' : ''}">
                         ${!m.isStickerOnly ? `
                             <div class="name-line" style="color: ${m.nameColor}">
-                                <span style="font-family: ${FONT_STACK};">${escapeHtml(m.username)}</span>
+                                <span style="font-family: ${FONT_STACK};">${m.username}</span>
                                 ${m.eStatus ? `<img src="${m.eStatus}" class="e-status" />` : ''}
                             </div>
                             ${m.replySender ? `<div class="reply" style="border-left-color: ${m.rColor};"><div class="reply-sender" style="color: ${m.rColor}">${escapeHtml(m.replySender)}</div><div class="reply-msg">${escapeHtml(m.pRMsg)}</div></div>` : ''}
@@ -180,20 +191,29 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         </div>
     </body></html>`;
 
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu', '--font-render-hinting=none', '--force-color-profile=srgb', '--disable-features=FontSrcLocalMatching'] });
+    // Increased stability for Chromium on Linux VPS
+    const browser = await puppeteer.launch({
+        headless: true, args: [
+            '--no-sandbox', '--disable-gpu', '--font-render-hinting=none',
+            '--disable-features=FontSrcLocalMatching', '--disable-web-security',
+            '--allow-file-access-from-files', '--force-color-profile=srgb'
+        ]
+    });
+
     const page = await browser.newPage();
     await page.setViewport({ width: 4000, height: 4000 });
     await page.setContent(htmlContent, { waitUntil: ['networkidle0', 'load'], timeout: 60000 });
     await page.evaluateHandle('document.fonts.ready');
-    // Long pause to let the Chromium font-shaping engine (HarfBuzz) settle complex diacritics
-    await new Promise(r => setTimeout(r, 2000));
 
-    const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
+    // Final settling time for the HarfBuzz shaping engine
+    await new Promise(r => setTimeout(r, 2500));
+
+    const screenshotBuffer = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await browser.close();
 
-    if (forceImage) return await sharp(screenshot).png().toBuffer();
+    if (forceImage) return await sharp(screenshotBuffer).png().toBuffer();
 
-    const scaled = await sharp(screenshot).resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true }).toBuffer();
+    const scaled = await sharp(screenshotBuffer).resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true }).toBuffer();
     const meta = await sharp(scaled).metadata();
     const padX = Math.floor((512 - meta.width) / 2);
     const padY = Math.floor((512 - meta.height) / 2);

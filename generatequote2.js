@@ -10,16 +10,12 @@ const path = require('path');
 const sharp = require('sharp');
 const axios = require('axios');
 
-// --- SHARED BROWSER ---
 let sharedBrowser = null;
 async function getBrowser() {
     if (sharedBrowser && sharedBrowser.connected) return sharedBrowser;
     sharedBrowser = await puppeteer.launch({
         headless: true,
-        args: [
-            '--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-            '--no-zygote', '--single-process', '--hide-scrollbars'
-        ]
+        args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--no-zygote', '--single-process', '--hide-scrollbars']
     });
     sharedBrowser.on('disconnected', () => { sharedBrowser = null; });
     return sharedBrowser;
@@ -35,7 +31,6 @@ const fontMap = {
     '/usr/share/fonts/truetype/noto/NotoSansMath-Regular.ttf': 'Noto Sans Math',
     '/usr/share/fonts/truetype/noto/NotoSansSC-Bold.otf': 'Noto Sans SC'
 };
-
 Object.entries(fontMap).forEach(([f, n]) => {
     if (fs.existsSync(f)) { try { registerFont(f, { family: n }); } catch (e) { } }
 });
@@ -48,7 +43,7 @@ function getTelegramDarkThemeColor(id) { const map = new Map([[0, '#FF516A'], [1
 function escapeHtml(t) { return t ? t.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;") : ''; }
 
 function createTextChunkImageBuffer(text, fontSize, color) {
-    const canvas = createCanvas(1, 1);
+    const canvas = createCanvas(1, 2); // Initial estimate
     const ctx = canvas.getContext('2d');
     ctx.font = `bold ${fontSize}px ${FONT_STACK}`;
     const m = ctx.measureText(text);
@@ -78,19 +73,13 @@ function generateNameHtml(text, color, fontSize) {
     return res;
 }
 
-const EMOJI_STATUS_CACHE_DIR = './emoji_status';
-if (!fs.existsSync(EMOJI_STATUS_CACHE_DIR)) fs.mkdirSync(EMOJI_STATUS_CACHE_DIR);
-
 async function getEmojiStatusBuffer(eId) {
-    const p = `${EMOJI_STATUS_CACHE_DIR}/${eId}.png`;
-    if (fs.existsSync(p)) return fs.readFileSync(p);
     try {
         const s = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/getCustomEmojiStickers`, { custom_emoji_ids: [eId] });
         const st = s.data.result?.[0]; if (!st) return null;
         const f = await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/getFile`, { file_id: st.thumbnail?.file_id || st.file_id });
         const i = await axios.get(`https://api.telegram.org/file/bot${BOT_TOKEN}/${f.data.result.file_path}`, { responseType: 'arraybuffer' });
-        const b = await sharp(i.data).resize(100, 100).png().toBuffer();
-        fs.writeFileSync(p, b); return b;
+        return await sharp(i.data).resize(100, 100).png().toBuffer();
     } catch (e) { return null; }
 }
 
@@ -138,27 +127,25 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 
     const html = `<html><head>
         <style>
-        body { margin: 0; padding: ${30 * scale}px; font-family: ${FONT_STACK}; background: transparent; display: flex; -webkit-font-smoothing: antialiased; }
-        #capture { display: flex; flex-direction: column; gap: ${25 * scale}px; width: fit-content; }
+        body { margin: 0; padding: 0; font-family: ${FONT_STACK}; background: transparent; -webkit-font-smoothing: antialiased; }
+        #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${15 * scale}px; width: fit-content; background: transparent; }
         .group { display: flex; align-items: flex-end; }
         
-        /* Text PP: 45, Sticker PP: 32 */
-        .avatar { width: ${45 * scale}px; height: ${45 * scale}px; border-radius: 50%; margin-right: ${12 * scale}px; flex-shrink: 0; align-self: flex-end; }
-        .s-avatar { width: ${32 * scale}px; height: ${32 * scale}px; margin-right: ${10 * scale}px; }
+        .avatar { width: ${45 * scale}px; height: ${45 * scale}px; border-radius: 50%; margin-right: ${10 * scale}px; flex-shrink: 0; }
+        .s-avatar { width: ${30 * scale}px; height: ${30 * scale}px; margin-right: ${8 * scale}px; }
 
-        .bubble { background: #2a2233; border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; padding: ${18 * scale}px ${25 * scale}px; position: relative; max-width: ${850 * scale}px; min-width: ${200 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .bubble::after { content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
+        .bubble { background: #2a2233; border-radius: ${20 * scale}px ${20 * scale}px ${20 * scale}px 0; padding: ${15 * scale}px ${22 * scale}px; position: relative; max-width: ${850 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .bubble::after { content: ''; position: absolute; bottom: 0; left: -${18 * scale}px; width: ${18 * scale}px; height: ${18 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M18 0 V18 H0 C9 18 18 9 18 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
         
         .s-bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
         .s-bubble::after { display: none !important; }
 
-        .name-line { display: flex; align-items: center; margin-bottom: ${12 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; }
+        .name-line { display: flex; align-items: center; margin-bottom: ${10 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; }
         .name-chunk { height: 1em; vertical-align: middle; }
         .e-status { height: 1.25em; width: 1.25em; border-radius: 5px; margin-left: ${10 * scale}px; }
         .msg { color: #fff; font-size: ${28 * scale}px; line-height: 1.4; word-break: break-word; }
-        .sticker { max-width: ${400 * scale}px; max-height: ${400 * scale}px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4)); border-radius: 12px; margin: ${5 * scale}px 0; }
-        
-        .reply { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 14px; border-left: 5px solid; margin-bottom: 12px; }
+        .sticker { max-width: ${350 * scale}px; max-height: ${350 * scale}px; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4)); margin: ${5 * scale}px 0; }
+        .reply { background: rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 14px; border-left: 5px solid; margin-bottom: 10px; }
         .r-name { font-weight: bold; margin-bottom: 4px; font-size: ${24 * scale}px; }
         .r-msg { color: #b0b0b0; font-size: ${22 * scale}px; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); }
     </style></head><body>
@@ -189,24 +176,14 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const page = await browser.newPage();
     await page.setViewport({ width: 4000, height: 4000 });
     await page.setContent(html, { waitUntil: 'load' });
-    await page.evaluateHandle('document.fonts.ready');
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await page.close();
 
-    // Fit perfectly inside 512x512 with minimal padding
-    const resized = await sharp(screenshot).resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true }).toBuffer();
-    const meta = await sharp(resized).metadata();
-
-    // Calculate centering padding
-    const left = Math.floor((512 - meta.width) / 2);
-    const top = Math.floor((512 - meta.height) / 2);
-
-    return await sharp(resized)
-        .extend({
-            top, bottom: 512 - meta.height - top,
-            left, right: 512 - meta.width - left,
-            background: { r: 0, g: 0, b: 0, alpha: 0 }
-        })
+    // FINAL FIX for the "Too Long" issue: 
+    // We resize to 512 max WITHOUT forcing a 512x512 square if the original image is short.
+    // This allows the image to be 512x200 (perfectly centered by Telegram).
+    return await sharp(screenshot)
+        .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 90 })
         .toBuffer();
 }

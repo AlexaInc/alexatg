@@ -192,7 +192,9 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
       if (stickerBuffer) {
         await bot.sendSticker(msg.chat.id, stickerBuffer, {
           reply_to_message_id: msg.reply_to_message?.message_id
-        }, { filename: 'quote.webp', contentType: 'image/webp' });
+        }, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => {
+          bot.sendSticker(msg.chat.id, stickerBuffer, {}, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => { });
+        });
       }
     } catch (err) {
       console.error(err);
@@ -227,32 +229,35 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
       let entities = [];
 
       if (text) {
-        let targetMsg = msg;
-
-        if (!text && msg.reply_to_message) {
-          targetMsg = msg.reply_to_message;
+        const originalOffset = msg.text.indexOf(text);
+        if (originalOffset !== -1) {
+          entities = (msg.entities || []).filter(e => e.offset >= originalOffset).map(e => ({ ...e, offset: e.offset - originalOffset }));
         }
-
-        const msgText = String(targetMsg.text || targetMsg.caption || ' ');
-        const msgEntities = targetMsg.entities || targetMsg.caption_entities || [];
-
-        const stickerBuffer = await createQuoteSticker(
-          from.first_name || '',
-          from.last_name || '',
-          chat.emoji_status_custom_emoji_id,
-          msgText,
-          chat.accent_color_id,
-          userPhoto,
-          replysender,
-          replycontent,
-          replysendercolor,
-          msgEntities
-        );
-
-        await bot.sendSticker(msg.chat.id, stickerBuffer, {
-          reply_to_message_id: msg.reply_to_message?.message_id
-        }, { filename: 'quote.webp', contentType: 'image/webp' });
+      } else if (msg.reply_to_message) {
+        text = msg.reply_to_message.text || msg.reply_to_message.caption || ' ';
+        entities = msg.reply_to_message.entities || msg.reply_to_message.caption_entities || [];
       }
+
+      if (!text) return;
+
+      const stickerBuffer = await createQuoteSticker(
+        from.first_name || '',
+        from.last_name || '',
+        chat.emoji_status_custom_emoji_id,
+        String(text),
+        chat.accent_color_id,
+        userPhoto,
+        replysender,
+        replycontent,
+        replysendercolor,
+        entities
+      );
+
+      await bot.sendSticker(msg.chat.id, stickerBuffer, {
+        reply_to_message_id: msg.reply_to_message?.message_id
+      }, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => {
+        bot.sendSticker(msg.chat.id, stickerBuffer, {}, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => { });
+      });
     } catch (err) { console.error(err); }
   });
 

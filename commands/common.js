@@ -210,25 +210,27 @@ module.exports = function (bot, deps) {
         replySenderColor = rChat.accent_color_id;
       }
 
-      const text = targetMsg.text || targetMsg.caption || '';
-      const entities = targetMsg.entities || targetMsg.caption_entities || [];
+      const msgText = String(targetMsg.text || targetMsg.caption || ' ');
+      const msgEntities = targetMsg.entities || targetMsg.caption_entities || [];
 
       const stickerBuffer = await createQuoteSticker(
         from.first_name || '',
         from.last_name || '',
         chat.emoji_status_custom_emoji_id,
-        text,
+        msgText,
         chat.accent_color_id,
         userPhoto,
         replymsgUser,
         replymsgContent,
         replySenderColor,
-        entities
+        msgEntities
       );
 
       await bot.sendSticker(chatId, stickerBuffer, {
-        reply_to_message_id: msg.message_id
-      }, { filename: 'quote.webp', contentType: 'image/webp' });
+        reply_to_message_id: targetMsg.message_id
+      }, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => {
+        bot.sendSticker(chatId, stickerBuffer, {}, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => { });
+      });
 
     } catch (err) {
       console.error("Q command error:", err);

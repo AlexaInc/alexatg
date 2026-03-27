@@ -366,11 +366,20 @@ async function renderMessageHTML(text, entities) {
     let lastOffset = 0;
 
     for (const entity of sortedEntities) {
-        if (entity.offset > lastOffset) {
-            html += highlightTextPatterns(sanitizedText.substring(lastOffset, entity.offset));
+        // Skip or clip entities that are outside the text bounds
+        if (entity.offset >= sanitizedText.length) continue;
+
+        // Ensure offsets are non-negative and sequential
+        const start = Math.max(0, entity.offset);
+        if (start < lastOffset) continue; // Skip overlapping entities for now
+
+        // Add plain text before the entity
+        if (start > lastOffset) {
+            html += highlightTextPatterns(sanitizedText.substring(lastOffset, start));
         }
 
-        const entityText = sanitizedText.substring(entity.offset, entity.offset + entity.length);
+        const end = Math.min(start + entity.length, sanitizedText.length);
+        const entityText = sanitizedText.substring(start, end);
         let partHtml = '';
 
         if (entity.type === 'custom_emoji') {
@@ -395,11 +404,17 @@ async function renderMessageHTML(text, entities) {
         }
 
         html += partHtml.replace(/\n/g, '<br/>');
-        lastOffset = entity.offset + entity.length;
+        lastOffset = end;
     }
 
-    if (lastOffset < text.length) {
-        html += highlightTextPatterns(text.substring(lastOffset));
+    // Add any remaining text
+    if (lastOffset < sanitizedText.length) {
+        html += highlightTextPatterns(sanitizedText.substring(lastOffset));
+    }
+
+    // Fallback if somehow html is still empty but text was not
+    if (!html && sanitizedText) {
+        return highlightTextPatterns(sanitizedText);
     }
 
     return html;

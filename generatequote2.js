@@ -183,7 +183,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         const username = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'Unknown';
         const nameColor = getTelegramDarkThemeColor(data.nameColorId);
         const highlighted = await renderMessageHTML(data.message, data.entities || data.messageEntities || []);
-        const nameHtml = generateNameHtml(username, nameColor, 26 * scale);
+        const nameHtml = generateNameHtml(username, nameColor, 28 * scale);
         let rHtml = ''; const rColorId = data.replysendercolor || 0; const rColor = getTelegramDarkThemeColor(rColorId);
         if (data.replySender) rHtml = generateNameHtml(data.replySender, rColor, 26 * scale);
         let pRMsg = data.replyMessage; if (pRMsg && pRMsg.length > 50) pRMsg = pRMsg.substring(0, 50);
@@ -198,20 +198,55 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     }));
 
     const htmlContent = `<html><head><style>
-        body { margin: 0; padding: ${30 * scale}px; font-family: ${FONT_STACK}; background: transparent; display: flex; flex-direction: column; gap: ${20 * scale}px; width: fit-content; }
-        .msg-group { display: flex; align-items: flex-end; }
-        .avatar { width: ${70 * scale}px; height: ${70 * scale}px; border-radius: 50%; margin-right: ${15 * scale}px; flex-shrink: 0; }
-        .bubble { background: #2a2233; border-radius: ${20 * scale}px ${20 * scale}px ${20 * scale}px 0; padding: ${18 * scale}px ${25 * scale}px; position: relative; min-width: ${250 * scale}px; max-width: ${700 * scale}px; display: flex; flex-direction: column; }
-        .bubble::after { content: ''; position: absolute; bottom: 0; left: -${20 * scale}px; width: ${20 * scale}px; height: ${20 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M20 0 V20 H0 C10 20 20 10 20 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
-        .name-line { display: flex; align-items: center; margin-bottom: ${12 * scale}px; font-size: ${26 * scale}px; font-weight: bold; white-space: nowrap; }
+        body { 
+            margin: 0; 
+            padding: ${40 * scale}px; 
+            font-family: ${FONT_STACK}; 
+            background: transparent; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            gap: ${25 * scale}px; 
+            width: fit-content;
+            min-width: 100vw;
+        }
+        .msg-group { 
+            display: flex; 
+            align-items: flex-end; 
+            width: 100%;
+            justify-content: center;
+        }
+        .avatar { width: ${75 * scale}px; height: ${75 * scale}px; border-radius: 50%; margin-right: ${15 * scale}px; flex-shrink: 0; }
+        .bubble { 
+            background: #2a2233; 
+            border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; 
+            padding: ${20 * scale}px ${30 * scale}px; 
+            position: relative; 
+            min-width: ${250 * scale}px; 
+            max-width: ${850 * scale}px;
+            display: flex; 
+            flex-direction: column; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .bubble::after { 
+            content: ''; 
+            position: absolute; 
+            bottom: 0; 
+            left: -${22 * scale}px; 
+            width: ${22 * scale}px; 
+            height: ${22 * scale}px; 
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); 
+            background-size: contain; 
+        }
+        .name-line { display: flex; align-items: center; margin-bottom: ${14 * scale}px; font-size: ${28 * scale}px; font-weight: bold; white-space: nowrap; }
         .name-chunk-image, .name-emoji, .name-whitespace { display: inline-block; vertical-align: middle; }
         .name-line .name-chunk-image { max-height: 1em; }
-        .e-status { width: ${26 * 1.5 * scale}px; height: ${26 * 1.5 * scale}px; margin-left: 8px; border-radius: 15%; }
-        .message { font-size: ${26 * scale}px; line-height: 1.4; color: #fefcff; word-break: break-word; }
+        .e-status { width: ${28 * 1.5 * scale}px; height: ${28 * 1.5 * scale}px; margin-left: ${10 * scale}px; border-radius: 15%; }
+        .message { font-size: ${28 * scale}px; line-height: 1.5; color: #fefcff; word-break: break-word; }
         .message-custom-emoji { width: 1.2em; height: 1.2em; vertical-align: middle; }
-        .reply { background: rgba(255,255,255,0.05); border-radius: ${10 * scale}px; position: relative; padding: 8px 10px 8px 12px; margin-bottom: 10px; border-left: 4px solid; }
-        .reply-sender { font-weight: bold; font-size: ${26 * scale}px; margin-bottom: 4px; }
-        .reply-msg { color: #b0b0b0; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); }
+        .reply { background: rgba(255,255,255,0.06); border-radius: ${12 * scale}px; position: relative; padding: ${10 * scale}px ${12 * scale}px ${10 * scale}px ${14 * scale}px; margin-bottom: ${12 * scale}px; border-left: ${5 * scale}px solid; }
+        .reply-sender { font-weight: bold; font-size: ${26 * scale}px; margin-bottom: ${5 * scale}px; }
+        .reply-msg { color: #b0b0b0; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 92%, transparent 100%); font-size: ${24 * scale}px; }
     </style></head><body>
         ${processedMessages.map(m => `
             <div class="msg-group">
@@ -227,17 +262,19 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-gpu'] });
     const page = await browser.newPage();
-    await page.setViewport({ width: 2500, height: 8000 });
+    await page.setViewport({ width: 3500, height: 10000 });
     await page.setContent(htmlContent, { waitUntil: 'domcontentloaded' });
     const body = await page.$('body');
     const screenshot = await body.screenshot({ omitBackground: true });
     await browser.close();
 
     if (forceImage) return await sharp(screenshot).png().toBuffer();
+
     const scaled = await sharp(screenshot).resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true }).toBuffer();
     const meta = await sharp(scaled).metadata();
-    const pad = Math.floor((512 - meta.width) / 2);
-    return await sharp(scaled).extend({ left: pad, right: pad, background: { r: 0, g: 0, b: 0, alpha: 0 } }).webp({ quality: 90 }).toBuffer();
+    const padX = Math.floor((512 - meta.width) / 2);
+    const padY = Math.floor((512 - meta.height) / 2);
+    return await sharp(scaled).extend({ top: padY, bottom: padY, left: padX, right: padX, background: { r: 0, g: 0, b: 0, alpha: 0 } }).webp({ quality: 90 }).toBuffer();
 }
 
 module.exports = createImage;

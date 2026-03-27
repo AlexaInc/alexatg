@@ -29,7 +29,7 @@ const fontMap = {
     '/usr/share/fonts/truetype/noto/NotoSansMath-Regular.ttf': 'Noto Sans Math',
     '/usr/share/fonts/truetype/noto/NotoSansSC-Bold.otf': 'Noto Sans SC'
 };
-Object.entries(fontMap).forEach(([f, n]) => { if (fs.existsSync(f)) { try { registerFont(f, { family: n }); } catch (e) { } } });
+Object.entries(fontMap).forEach(([f, n]) => { if (fs.existsSync(f)) { try { registerFont(f, { family: n }); } catch (e) {} } });
 
 const FONT_STACK = "'Noto Sans', 'Noto Sans SC', 'Noto Sans Symbols', 'Arial Unicode MS', sans-serif";
 const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
@@ -82,10 +82,10 @@ async function getEmojiStatusBuffer(eId) {
 async function createDummyAvatarBuffer(f, l, color, scale) {
     const s = 140 * scale;
     const canvas = createCanvas(s, s); const ctx = canvas.getContext('2d');
-    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#FFF'; ctx.font = `bold ${50 * scale}px ${FONT_STACK}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const init = ((f?.[0] || '') + (l?.[0] || '')).toUpperCase().substring(0, 2);
-    ctx.fillText(init || '?', s / 2, s / 2);
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(s/2, s/2, s/2, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#FFF'; ctx.font = `bold ${50*scale}px ${FONT_STACK}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const init = ((f?.[0]||'') + (l?.[0]||'')).toUpperCase().substring(0, 2);
+    ctx.fillText(init || '?', s/2, s/2);
     return canvas.toBuffer('image/png');
 }
 
@@ -100,17 +100,16 @@ function highlightTextPatterns(t) {
 async function createImage(firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities = []) {
     let msgList = Array.isArray(firstName) ? firstName : [{ firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities, id: '1' }];
     const scale = 4;
-
+    
     let processedRaw = await Promise.all(msgList.map(async (data) => {
         const username = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'User';
         const color = getTelegramDarkThemeColor(data.nameColorId);
         const nameHtml = generateNameHtml(username, color, 30 * scale);
         let avatar = data.inputImageBuffer ? await sharp(data.inputImageBuffer).png().toBuffer() : await createDummyAvatarBuffer(data.firstName, data.lastName, color, scale);
         let mB64 = null;
-        if (data.mediaBuffer) {
-            // High Resolution Sticker Source
-            const b = await sharp(data.mediaBuffer).resize(512, 512, { fit: 'inside' }).png().toBuffer();
-            mB64 = `data:image/png;base64,${b.toString('base64')}`;
+        if (data.mediaBuffer) { 
+            const b = await sharp(data.mediaBuffer).resize(512, 512, { fit: 'inside' }).png().toBuffer(); 
+            mB64 = `data:image/png;base64,${b.toString('base64')}`; 
         }
         const isS = !!data.mediaBuffer && (!data.message || data.message.trim() === '');
         const rColor = getTelegramDarkThemeColor(data.replysendercolor || 0);
@@ -120,34 +119,38 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             avatar: `data:image/png;base64,${avatar.toString('base64')}`,
             nameHtml, messageHtml: highlightTextPatterns(data.message || ''),
             mediaBase64: mB64, isSticker: isS, rNameHtml: rName, rMsg: data.replyMessage, rColor, nameColor: color,
-            userId: data.id || username
+            userId: data.id || username 
         };
     }));
 
     const processedMessages = processedRaw.map((m, i) => {
-        const next = processedRaw[i + 1];
-        const prev = processedRaw[i - 1];
+        const next = processedRaw[i + 1]; const prev = processedRaw[i - 1];
         const nextIsSame = next && next.userId === m.userId;
         const prevIsSame = prev && prev.userId === m.userId;
-        const showName = !prevIsSame;
-        const showAvatar = !nextIsSame;
-        return { ...m, showName, showAvatar };
+        return { ...m, showName: !prevIsSame, showAvatar: !nextIsSame };
     });
 
     const html = `<html><head>
         <style>
         body { margin: 0; padding: 0; font-family: ${FONT_STACK}; background: transparent; -webkit-font-smoothing: antialiased; }
-        #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${15 * scale}px; width: fit-content; }
+        #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${15 * scale}px; width: fit-content; background: transparent; }
         .group { display: flex; align-items: flex-end; }
         
         .avatar-area { width: ${85 * scale}px; margin-right: ${12 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
-        .avatar { width: ${85 * scale}px; height: ${85 * scale}px; border-radius: 50%; opacity: 1; display: block; }
+        .avatar { width: ${85 * scale}px; height: ${85 * scale}px; border-radius: 50%; display: block; }
         .s-avatar-area { width: ${38 * scale}px !important; margin-right: ${8 * scale}px !important; }
         .s-avatar { width: ${38 * scale}px !important; height: ${38 * scale}px !important; }
         .hidden-avatar { opacity: 0; } 
 
         .bubble { background: #2a2233; border-radius: ${25 * scale}px; padding: ${18 * scale}px ${25 * scale}px; position: relative; max-width: ${950 * scale}px; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .bubble-tail::after { content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); background-size: contain; }
+        
+        /* RESTORED: Bubble Tail (The Needle) */
+        .bubble-tail { border-radius: ${25 * scale}px ${25 * scale}px ${25 * scale}px 0; }
+        .bubble-tail::after { 
+            content: ''; position: absolute; bottom: 0; left: -${22 * scale}px; width: ${22 * scale}px; height: ${22 * scale}px; 
+            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%232a2233' d='M22 0 V22 H0 C11 22 22 11 22 0 Z'/%3E%3C/svg%3E"); 
+            background-size: contain; 
+        }
         
         .s-bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
         .s-bubble::after { display: none !important; }
@@ -180,12 +183,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     await page.setContent(html, { waitUntil: 'load' });
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await page.close();
-
-    return await sharp(screenshot)
-        .trim({ threshold: 5, background: { r: 0, g: 0, b: 0, alpha: 0 } })
-        .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 100, lossless: false }) // Max possible WebP quality
-        .toBuffer();
+    return await sharp(screenshot).trim({ threshold: 5 }).resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true }).webp({ quality: 100 }).toBuffer();
 }
 
 module.exports = createImage;

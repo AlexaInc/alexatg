@@ -29,9 +29,9 @@ const fontMap = {
     '/usr/share/fonts/truetype/noto/NotoSansMath-Regular.ttf': 'Noto Sans Math',
     '/usr/share/fonts/truetype/noto/NotoSansSC-Bold.otf': 'Noto Sans SC'
 };
-Object.entries(fontMap).forEach(([f, n]) => { if (fs.existsSync(f)) { try { registerFont(f, { family: n }); } catch (e) {} } });
+Object.entries(fontMap).forEach(([f, n]) => { if (fs.existsSync(f)) { try { registerFont(f, { family: n }); } catch (e) { } } });
 
-const FONT_STACK = "'Noto Sans', 'Noto Sans SC', 'Noto Sans Symbols', 'Arial Unicode MS', sans-serif";
+const FONT_STACK = "'Noto Sans', 'Noto Sans SC', 'Noto Sans Symbols', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'Android Emoji', 'EmojiSymbols', sans-serif";
 const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
 
 function getTelegramDarkThemeColor(id) { const map = new Map([[0, '#FF516A'], [1, '#FF9442'], [2, '#C66FFF'], [3, '#50D892'], [4, '#64D4F5'], [5, '#5095ED'], [6, '#FF66A6'], [7, '#FF8280'], [8, '#EDD64E'], [9, '#C66FFF']]); return map.get(id) || '#00ffff'; }
@@ -57,9 +57,11 @@ function generateNameHtml(text, color, fontSize) {
     if (!text) return '';
     const seg = new Intl.Segmenter();
     let res = '';
+    // FIXED: Using Emoji_Presentation to only target 'Color' Emojis in Spans
+    const emojiRegex = /\p{Emoji_Presentation}/u;
     for (const s of seg.segment(text)) {
         const c = s.segment;
-        if (/\p{Emoji}/u.test(c)) res += `<span class="name-emoji" style="font-size: ${fontSize}px;">${escapeHtml(c)}</span>`;
+        if (emojiRegex.test(c)) res += `<span class="name-emoji" style="font-size: ${fontSize}px;">${escapeHtml(c)}</span>`;
         else if (c.match(/^\s+$/)) res += `<span style="white-space: pre;">${c}</span>`;
         else {
             const b = createTextChunkImageBuffer(c, fontSize, color);
@@ -86,8 +88,8 @@ async function getCustomEmojiBase64(eId) {
 // FIXED: Correct UTF-16 Offset-based slice and replace logic
 async function processMessageHtml(text, entities = []) {
     if (!text) return '';
-    const sorted = (entities || []).filter(e => e.type === 'custom_emoji').sort((a,b) => b.offset - a.offset);
-    
+    const sorted = (entities || []).filter(e => e.type === 'custom_emoji').sort((a, b) => b.offset - a.offset);
+
     let resultRows = []; // Using pieces to avoid offset issues
     let lastOffset = text.length;
 
@@ -104,7 +106,7 @@ async function processMessageHtml(text, entities = []) {
     }
     // Add the remaining START of the string
     resultRows.unshift(text.substring(0, lastOffset));
-    
+
     const combined = resultRows.join('');
     // IMPROVED HIGHLIGHTING: Full Bot Commands (/start@bot), Mentions, and Links
     const highlightRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|\/\w+(?:@\w+)?)/g;
@@ -119,16 +121,16 @@ async function processMessageHtml(text, entities = []) {
 async function createDummyAvatarBuffer(f, l, color, scale) {
     const s = 140 * scale;
     const canvas = createCanvas(s, s); const ctx = canvas.getContext('2d');
-    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(s/2, s/2, s/2, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#FFF'; ctx.font = `bold ${50*scale}px ${FONT_STACK}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const init = ((f?.[0]||'') + (l?.[0]||'')).toUpperCase().substring(0, 2);
-    ctx.fillText(init || '?', s/2, s/2);
+    ctx.fillStyle = color; ctx.beginPath(); ctx.arc(s / 2, s / 2, s / 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#FFF'; ctx.font = `bold ${50 * scale}px ${FONT_STACK}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const init = ((f?.[0] || '') + (l?.[0] || '')).toUpperCase().substring(0, 2);
+    ctx.fillText(init || '?', s / 2, s / 2);
     return canvas.toBuffer('image/png');
 }
 
 async function createImage(firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities = []) {
     let msgList = Array.isArray(firstName) ? firstName : [{ firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities, id: '1' }];
-    const scale = 5; 
+    const scale = 5;
 
     let processedRaw = await Promise.all(msgList.map(async (data) => {
         const username = `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'User';
@@ -136,9 +138,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         const nameHtml = generateNameHtml(username, color, 32 * scale);
         let avatar = data.inputImageBuffer ? await sharp(data.inputImageBuffer).png().toBuffer() : await createDummyAvatarBuffer(data.firstName, data.lastName, color, scale);
         let mB64 = null;
-        if (data.mediaBuffer) { 
-            const b = await sharp(data.mediaBuffer).resize(512, 512, { fit: 'inside' }).png().toBuffer(); 
-            mB64 = `data:image/png;base64,${b.toString('base64')}`; 
+        if (data.mediaBuffer) {
+            const b = await sharp(data.mediaBuffer).resize(512, 512, { fit: 'inside' }).png().toBuffer();
+            mB64 = `data:image/png;base64,${b.toString('base64')}`;
         }
         const isS = !!data.mediaBuffer && (!data.message || data.message.trim() === '');
         const rColor = getTelegramDarkThemeColor(data.replysendercolor || 0);
@@ -220,7 +222,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     await page.setContent(html, { waitUntil: 'load' });
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await page.close();
-    
+
     return await sharp(screenshot).trim({ threshold: 5 }).resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true }).webp({ quality: 100 }).toBuffer();
 }
 

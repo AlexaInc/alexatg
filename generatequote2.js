@@ -57,17 +57,12 @@ function generateNameHtml(text, color, fontSize) {
     if (!text) return '';
     const seg = new Intl.Segmenter();
     let res = '';
-
-    // Switch to Twemoji CDN for 100% emoji coverage (even on old servers)
     const emojiRegex = /\p{Emoji_Presentation}/u;
-
     for (const s of seg.segment(text)) {
         const c = s.segment;
         if (emojiRegex.test(c)) {
-            // Convert emoji to code points hex (Twitter style)
-            const codePoints = [...c].map(char => char.codePointAt(0).toString(16)).join('-');
-            const twemojiUrl = `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codePoints}.svg`;
-            res += `<img src="${twemojiUrl}" class="name-emoji" style="height: 1.1em; width: 1.1em; vertical-align: middle; margin: 0 2px;" />`;
+            // Put the real emoji character, Twemoji script will swap it
+            res += `<span class="emoji-parse">${escapeHtml(c)}</span>`;
         } else if (c.match(/^\s+$/)) {
             res += `<span style="white-space: pre;">${c}</span>`;
         } else {
@@ -92,36 +87,25 @@ async function getCustomEmojiBase64(eId) {
     } catch (e) { return null; }
 }
 
-// FIXED: Correct UTF-16 Offset-based slice and replace logic
 async function processMessageHtml(text, entities = []) {
     if (!text) return '';
     const sorted = (entities || []).filter(e => e.type === 'custom_emoji').sort((a, b) => b.offset - a.offset);
-
-    let resultRows = []; // Using pieces to avoid offset issues
-    let lastOffset = text.length;
-
+    let resultRows = []; let lastOffset = text.length;
     for (const e of sorted) {
         const b64 = await getCustomEmojiBase64(e.custom_emoji_id);
         if (b64) {
-            // Get everything AFTER this emoji up to last handled offset
-            const post = text.substring(e.offset + e.length, lastOffset);
-            resultRows.unshift(post);
-            // Put the emoji image
+            resultRows.unshift(text.substring(e.offset + e.length, lastOffset));
             resultRows.unshift(`<img src="${b64}" class="msg-emoji" />`);
             lastOffset = e.offset;
         }
     }
-    // Add the remaining START of the string
     resultRows.unshift(text.substring(0, lastOffset));
-
     const combined = resultRows.join('');
-    // IMPROVED HIGHLIGHTING: Full Bot Commands (/start@bot), Mentions, and Links
     const highlightRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|\/\w+(?:@\w+)?)/g;
     return combined.split(/(<img[^>]+>)/).map(part => {
         if (part.startsWith('<img')) return part;
-        return part.replace(highlightRegex, (p) => {
-            return `<span style="color: #6ab8ed; text-decoration: none;">${escapeHtml(p)}</span>`;
-        }).replace(/\n/g, '<br/>');
+        // Keep emojis as text for Twemoji to parse
+        return part.replace(highlightRegex, (p) => `<span style="color: #6ab8ed; text-decoration: none;">${escapeHtml(p)}</span>`).replace(/\n/g, '<br/>');
     }).join('');
 }
 
@@ -145,21 +129,13 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         const nameHtml = generateNameHtml(username, color, 32 * scale);
         let avatar = data.inputImageBuffer ? await sharp(data.inputImageBuffer).png().toBuffer() : await createDummyAvatarBuffer(data.firstName, data.lastName, color, scale);
         let mB64 = null;
-        if (data.mediaBuffer) {
-            const b = await sharp(data.mediaBuffer).resize(512, 512, { fit: 'inside' }).png().toBuffer();
-            mB64 = `data:image/png;base64,${b.toString('base64')}`;
-        }
+        if (data.mediaBuffer) { const b = await sharp(data.mediaBuffer).resize(512, 512, { fit: 'inside' }).png().toBuffer(); mB64 = `data:image/png;base64,${b.toString('base64')}`; }
         const isS = !!data.mediaBuffer && (!data.message || data.message.trim() === '');
         const rColor = getTelegramDarkThemeColor(data.replysendercolor || 0);
         const rName = data.replySender ? generateNameHtml(data.replySender, rColor, 26 * scale) : '';
         const eStat = data.customemojiid ? await getCustomEmojiBase64(data.customemojiid) : null;
         const msgH = await processMessageHtml(data.message || '', data.entities || []);
-
-        return {
-            avatar: `data:image/png;base64,${avatar.toString('base64')}`,
-            nameHtml, messageHtml: msgH, mediaBase64: mB64, isSticker: isS, rNameHtml: rName, rMsg: data.replyMessage, rColor, nameColor: color,
-            userId: data.id || username, eStatus: eStat
-        };
+        return { avatar: `data:image/png;base64,${avatar.toString('base64')}`, nameHtml, messageHtml: msgH, mediaBase64: mB64, isSticker: isS, rNameHtml: rName, rMsg: data.replyMessage, rColor, nameColor: color, userId: data.id || username, eStatus: eStat };
     }));
 
     const processedMessages = processedRaw.map((m, i) => {
@@ -170,6 +146,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     });
 
     const html = `<html><head>
+        <script src="https://unpkg.com/twemoji@latest/dist/twemoji.min.js" crossorigin="anonymous"></script>
         <style>
         body { margin: 0; padding: 0; font-family: ${FONT_STACK}; background: transparent; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
         #capture { display: inline-flex; flex-direction: column; gap: ${12 * scale}px; padding: ${12 * scale}px; width: fit-content; }
@@ -190,7 +167,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         .name-line { display: flex; align-items: center; margin-bottom: ${10 * scale}px; font-size: ${32 * scale}px; font-weight: bold; line-height: 1.1; }
         .e-status { height: 1.15em; width: 1.15em; margin-left: 8px; border-radius: 4px; }
         .msg { color: #fff; font-size: ${36 * scale}px; line-height: 1.5; word-break: break-word; font-weight: 500; }
-        .msg-emoji { height: 1.1em; width: 1.1em; vertical-align: middle; margin: 0 2px; }
+        .msg-emoji, .emoji { height: 1.1em !important; width: 1.1em !important; vertical-align: middle; margin: 0 2px; }
         .sticker { max-width: ${400 * scale}px; max-height: ${400 * scale}px; filter: drop-shadow(0 4px 15px rgba(0,0,0,0.4)); display: block; border-radius: 12px; }
         .reply { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px; border-left: 6px solid; margin-bottom: 12px; max-width: 100%; box-sizing: border-box; }
         .r-name { font-weight: bold; margin-bottom: 4px; font-size: ${26 * scale}px; line-height: 1; }
@@ -203,33 +180,25 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
                         <img src="${m.avatar}" class="avatar ${m.isSticker ? 's-avatar' : ''} ${!m.showAvatar ? 'hidden-avatar' : ''}" />
                     </div>
                     <div class="bubble ${(m.showAvatar && !m.isSticker) ? 'bubble-tail' : ''} ${m.isSticker ? 's-bubble' : ''}">
-                        ${m.showName && !m.isSticker ? `
-                            <div class="name-line" style="color: ${m.nameColor}">
-                                ${m.nameHtml}
-                                ${m.eStatus ? `<img src="${m.eStatus}" class="e-status" />` : ''}
-                            </div>
-                        ` : ''}
-                        ${m.rNameHtml && !m.isSticker ? `
-                            <div class="reply" style="border-left-color: ${m.rColor}">
-                                <div class="r-name" style="color: ${m.rColor}">${m.rNameHtml}</div>
-                                <div class="r-msg">${escapeHtml(m.rMsg)}</div>
-                            </div>
-                        ` : ''}
+                        ${m.showName && !m.isSticker ? `<div class="name-line" style="color: ${m.nameColor}">${m.nameHtml} ${m.eStatus ? `<img src="${m.eStatus}" class="e-status" />` : ''}</div>` : ''}
+                        ${m.rNameHtml && !m.isSticker ? `<div class="reply" style="border-left-color: ${m.rColor}"><div class="r-name" style="color: ${m.rColor}">${m.rNameHtml}</div><div class="r-msg">${escapeHtml(m.rMsg)}</div></div>` : ''}
                         ${m.mediaBase64 ? `<img src="${m.mediaBase64}" class="sticker" />` : ''}
                         ${m.messageHtml ? `<div class="msg">${m.messageHtml}</div>` : ''}
                     </div>
                 </div>
             `).join('')}
         </div>
+        <script>
+            twemoji.parse(document.body, { base: 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/' });
+        </script>
     </body></html>`;
 
     const browser = await getBrowser();
     const page = await browser.newPage();
     await page.setViewport({ width: 5000, height: 5000 });
-    await page.setContent(html, { waitUntil: 'load' });
+    await page.setContent(html, { waitUntil: 'networkidle0' });
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });
     await page.close();
-
     return await sharp(screenshot).trim({ threshold: 5 }).resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: true }).webp({ quality: 100 }).toBuffer();
 }
 

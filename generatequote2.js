@@ -57,13 +57,20 @@ function generateNameHtml(text, color, fontSize) {
     if (!text) return '';
     const seg = new Intl.Segmenter();
     let res = '';
-    // FIXED: Using Emoji_Presentation to only target 'Color' Emojis in Spans
+
+    // Switch to Twemoji CDN for 100% emoji coverage (even on old servers)
     const emojiRegex = /\p{Emoji_Presentation}/u;
+
     for (const s of seg.segment(text)) {
         const c = s.segment;
-        if (emojiRegex.test(c)) res += `<span class="name-emoji" style="font-size: ${fontSize}px;">${escapeHtml(c)}</span>`;
-        else if (c.match(/^\s+$/)) res += `<span style="white-space: pre;">${c}</span>`;
-        else {
+        if (emojiRegex.test(c)) {
+            // Convert emoji to code points hex (Twitter style)
+            const codePoints = [...c].map(char => char.codePointAt(0).toString(16)).join('-');
+            const twemojiUrl = `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codePoints}.svg`;
+            res += `<img src="${twemojiUrl}" class="name-emoji" style="height: 1.1em; width: 1.1em; vertical-align: middle; margin: 0 2px;" />`;
+        } else if (c.match(/^\s+$/)) {
+            res += `<span style="white-space: pre;">${c}</span>`;
+        } else {
             const b = createTextChunkImageBuffer(c, fontSize, color);
             res += `<img src="data:image/png;base64,${b.toString('base64')}" style="height: 1em; vertical-align: middle;" />`;
         }

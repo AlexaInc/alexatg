@@ -103,28 +103,42 @@ async function getCustomEmojiBase64(eId) {
     } catch (e) { return null; }
 }
 
+// FIXED: Order of operations to prevent regex from breaking internal emoji URLs
 async function processMessageHtml(text, entities = []) {
     if (!text) return '';
     const sorted = (entities || []).filter(e => e.type === 'custom_emoji').sort((a, b) => b.offset - a.offset);
-    let rows = []; let last = text.length;
+    let rows = []; let lastOffset = text.length;
     for (const e of sorted) {
         const b = await getCustomEmojiBase64(e.custom_emoji_id);
-        if (b) { rows.unshift(text.substring(e.offset + e.length, last)); rows.unshift(`<img src="${b}" class="msg-emoji" />`); last = e.offset; }
+        if (b) { rows.unshift(text.substring(e.offset + e.length, lastOffset)); rows.unshift(`<img src="${b}" class="msg-emoji" />`); lastOffset = e.offset; }
     }
-    rows.unshift(text.substring(0, last));
+    rows.unshift(text.substring(0, lastOffset));
     const combined = rows.join('');
+
     const highlightRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|\/\w+(?:@\w+)?)/g;
-    const seg = new Intl.Segmenter();
     const emojiRegex = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base})/u;
+    const seg = new Intl.Segmenter();
+
     return combined.split(/(<img[^>]+>)/).map(part => {
         if (part.startsWith('<img')) return part;
-        let pRes = '';
-        for (const s of seg.segment(part)) {
-            const c = s.segment;
-            if (emojiRegex.test(c)) pRes += `<img src="${getTwemojiUrl(c)}" class="emoji" />`;
-            else pRes += c;
-        }
-        return pRes.replace(highlightRegex, (p) => `<span style="color: #6ab8ed;">${escapeHtml(p)}</span>`).replace(/\n/g, '<br/>');
+        // 1. Highlight standard text patterns first (Links/Mentions)
+        const highlighted = part.replace(highlightRegex, (p) => `<span style="color: #6ab8ed;">${escapeHtml(p)}</span>`);
+
+        // 2. Process segment by segment to replace Emojis ONLY in parts that aren't already highlighted
+        let finalHtml = '';
+        highlighted.split(/(<span[^>]+>|<\/span>)/).map(subPart => {
+            if (subPart.startsWith('<span') || subPart === '</span>') {
+                finalHtml += subPart;
+            } else {
+                // Not in a highlight tag, replace emojis and newlines
+                for (const s of seg.segment(subPart)) {
+                    const c = s.segment;
+                    if (emojiRegex.test(c)) finalHtml += `<img src="${getTwemojiUrl(c)}" class="emoji" />`;
+                    else finalHtml += escapeHtml(c).replace(/\n/g, '<br/>');
+                }
+            }
+        });
+        return finalHtml;
     }).join('');
 }
 
@@ -161,11 +175,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         body { margin: 0; padding: 0; font-family: ${FONT_STACK}; background: transparent; -webkit-font-smoothing: antialiased; }
         #capture { display: inline-flex; flex-direction: column; gap: ${6 * scale}px; padding: ${10 * scale}px; width: fit-content; }
         .group { display: flex; align-items: flex-end; position: relative; }
-        
         .avatar-area { width: ${70 * scale}px; margin-right: ${8 * scale}px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; margin-bottom: -${2 * scale}px; }
         .avatar { width: ${70 * scale}px; height: ${70 * scale}px; border-radius: 50%; display: block; }
         .hidden-avatar { opacity: 0; } 
-
         .bubble { background: #1b242d; border-radius: ${15 * scale}px; padding: ${12 * scale}px ${18 * scale}px; position: relative; max-width: ${750 * scale}px; width: fit-content; display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.5); }
         .bubble-tail { border-radius: ${15 * scale}px ${15 * scale}px ${15 * scale}px 0 !important; }
         .bubble-tail::after { 
@@ -173,28 +185,22 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='%231b242d' d='M18 0 V18 H0 C9 18 18 9 18 0 Z'/%3E%3C/svg%3E"); 
             background-size: contain; 
         }
-
         .name-line { display: flex; align-items: center; margin-bottom: ${6 * scale}px; font-size: ${28 * scale}px; font-weight: bold; line-height: 1.1; }
         .e-status { height: 1.1em; width: 1.1em; margin-left: 8px; }
         .msg { color: #ffffff; font-size: ${32 * scale}px; line-height: 1.4; word-break: break-word; font-weight: 500; }
         .emoji { height: 1.1em; width: 1.1em; vertical-align: middle; margin: 0 2px; }
-        .msg-emoji { height: 1.2em; width: 1.2em; vertical-align: middle; margin: 0 2px; }
-        
+        .msg-emoji { height: 1.25em; width: 1.25em; vertical-align: middle; margin: 0 2px; }
         .reply { background: rgba(255,255,255,0.06); border-radius: ${8 * scale}px; padding: ${8 * scale}px ${12 * scale}px; border-left: ${4 * scale}px solid; margin-bottom: ${10 * scale}px; width: fit-content; max-width: 100%; box-sizing: border-box; }
         .r-name { font-weight: bold; margin-bottom: 2px; font-size: ${24 * scale}px; line-height: 1.1; }
         .r-msg { color: #8e969d; font-size: ${22 * scale}px; white-space: nowrap; overflow: hidden; -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%); }
-        
         .sticker { max-width: ${420 * scale}px; max-height: ${420 * scale}px; display: block; }
         .s-avatar-area { width: ${38 * scale}px !important; margin-right: 6px !important; }
         .s-avatar { width: ${38 * scale}px !important; height: ${38 * scale}px !important; }
         .s-bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
-    </style></head><body>
-        <div id="capture">
+    </style></head><body><div id="capture">
             ${processedMessages.map(m => `
                 <div class="group">
-                    <div class="avatar-area ${m.isSticker ? 's-avatar-area' : ''}">
-                        <img src="${m.avatar}" class="avatar ${m.isSticker ? 's-avatar' : ''} ${!m.showAvatar ? 'hidden-avatar' : ''}" />
-                    </div>
+                    <div class="avatar-area ${m.isSticker ? 's-avatar-area' : ''}"><img src="${m.avatar}" class="avatar ${m.isSticker ? 's-avatar' : ''} ${!m.showAvatar ? 'hidden-avatar' : ''}" /></div>
                     <div class="bubble ${(m.showAvatar && !m.isSticker) ? 'bubble-tail' : ''} ${m.isSticker ? 's-bubble' : ''}">
                         ${m.showName && !m.isSticker ? `<div class="name-line" style="color: ${m.nameColor}">${m.nameHtml} ${m.eStatus ? `<img src="${m.eStatus}" class="e-status" />` : ''}</div>` : ''}
                         ${m.rNameHtml && !m.isSticker ? `<div class="reply" style="border-left-color: ${m.rColor}"><div class="r-name" style="color: ${m.rColor}">${m.rNameHtml}</div><div class="r-msg">${escapeHtml(m.rMsg)}</div></div>` : ''}
@@ -203,11 +209,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
                     </div>
                 </div>
             `).join('')}
-        </div>
-    </body></html>`;
+        </div></body></html>`;
 
-    const browser = await getBrowser();
-    const page = await browser.newPage();
+    const browser = await getBrowser(); const page = await browser.newPage();
     await page.setViewport({ width: 5000, height: 5000 });
     await page.setContent(html, { waitUntil: 'networkidle0' });
     const screenshot = await (await page.$('#capture')).screenshot({ omitBackground: true });

@@ -81,9 +81,9 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
     try {
       await bot.sendMessage(msg.chat.id, "🚀 Updating... Please wait.");
 
-      exec('git pull', async (err, stdout, stderr) => {
+      exec('git pull --allow-unrelated-histories', async (err, stdout, stderr) => {
         if (err) {
-          return bot.sendMessage(msg.chat.id, `❌ Git Error: ${err.message}`);
+          return bot.sendMessage(msg.chat.id, `❌ Git Error: ${err.message}\n${stderr}`);
         }
 
         if (logGrpid) await bot.sendMessage(logGrpid, "✅ Update successful. Restarting bots...");

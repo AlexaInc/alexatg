@@ -150,15 +150,22 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         let mediaB64 = null;
         if (d.mediaBuffer) {
             try {
+                // Animation Safety: Check for Gzip (TGS) or JSON signatures before Sharp
+                const isGzip = d.mediaBuffer[0] === 0x1f && d.mediaBuffer[1] === 0x8b;
+                const isJson = d.mediaBuffer[0] === 0x7b; // '{'
+
+                if (isGzip || isJson) {
+                    throw new Error("TGS/JSON not supported by Sharp");
+                }
+
                 const mb = await sharp(d.mediaBuffer)
                     .resize(800, 800, { fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
                     .png()
                     .toBuffer();
                 mediaB64 = `data:image/png;base64,${mb.toString('base64')}`;
             } catch (err) {
-                console.error("Sharp media processing failed:", err.message);
-                // FALLBACK ICON FOR ANIMATED/VIDEO STICKERS
-                mediaB64 = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkw0IDhWMTZMMTIgMjJMMjAgMTZWOFwxMiAyWiIgc3Ryb2tlPSIjN2Y5MWE0IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0xMiA2TDEwIDhMMTIgMTBMMTQgOEwxMiA2WiIgZmlsbD0iIzdmOTFhNCIvPjxwYXRoIGQ9Ik0xMiAxMkwxMCAxNEwxMiAxNkwxNCAxNEwxMiAxMloiIGZpbGw9IiM3ZjkxYTQiLz48L3N2Zz4=";
+                // Silent fallback for animations/unsupported
+                mediaB64 = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkw0IDhVMTZMMTIgMjJMMjAgMTZWOFwxMiAyWiIgc3Ryb2tlPSIjN2Y5MWE0IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0xMiA2TDEwIDhMMTIgMTBMMTQgOEwxMiA2WiIgZmlsbD0iIzdmOTFhNCIvPjxwYXRoIGQ9Ik0xMiAxMkwxMCAxNEwxMiAxNkwxNCAxNEwxMiAxMloiIGZpbGw9IiM3ZjkxYTQiLz48L3N2Zz4=";
             }
         }
         const isSticker = !!d.mediaBuffer && (!d.message || !d.message.trim());

@@ -197,25 +197,26 @@ module.exports = function (bot, deps) {
               } catch (e) { }
             }
 
-            // 2. DOWNLOAD MEDIA (Stickers)
-            // Use Bot API for sticker thumbnails as it's more robust for static extraction
+            // 2. DOWNLOAD MEDIA (Stickers/Photos)
             let mediaBuffer = null;
             if (m.media) {
               try {
                 const doc = m.media.document;
                 const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
 
-                if (doc && isSticker) {
-                  // Attempt Bot API thumbnail fetch first for animations
-                  try {
-                    const sFile = await bot.getFile(doc.id.toString());
-                    const sLink = await bot.getFileLink(sFile.file_id);
-                    mediaBuffer = await downloadImage(sLink);
-                  } catch (e) {
-                    // Fallback to GramJS if Bot API fails
-                    mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
+                if (doc && isSticker && doc.mimeType !== 'image/webp') {
+                  // Animated/Video stickers: Use static thumbnail via GramJS size code
+                  let bestSize = null;
+                  if (doc.thumbs && doc.thumbs.length > 0) {
+                    const priority = ['y', 'x', 'w', 'v', 'm', 's'];
+                    for (const p of priority) {
+                      if (doc.thumbs.some(t => t.size === p)) { bestSize = p; break; }
+                    }
+                    if (!bestSize) bestSize = doc.thumbs[doc.thumbs.length - 1].size;
                   }
-                } else if (m.media.className === 'MessageMediaPhoto') {
+                  mediaBuffer = await client.downloadMedia(m.media, { thumbSize: bestSize }).catch(() => null);
+                } else {
+                  // Static sticker or Regular photo
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
               } catch (e) { }

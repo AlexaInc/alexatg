@@ -234,7 +234,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-serif; background: ${BGC}; color: var(--text-color); -webkit-font-smoothing: antialiased; }
 #wrap { display: inline-flex; flex-direction: column; gap: 0; padding: ${8 * SCALE}px; }
 
-.bubble-container { display: flex; align-items: flex-end; position: relative; max-width: ${420 * SCALE}px; }
+.bubble-container { display: flex; align-items: flex-end; position: relative; max-width: ${280 * SCALE}px; }
 .bubble-container.sender-break { margin-top: ${10 * SCALE}px; }
 .bubble-container.in  { align-self: flex-start; }
 
@@ -243,7 +243,7 @@ body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-
 .bubble-pp.hidden { opacity: 0; }
 
 /* ── Bubble ── */
-.bubble { position: relative; padding: ${8 * SCALE}px ${12 * SCALE}px; border-radius: var(--r); background: var(--msg-in); color: #fff; font-size: ${MSG_FS}px; line-height: 1.45; word-break: break-word; box-shadow: 0 1px ${3 * SCALE}px rgba(0,0,0,.25); max-width: 100%; }
+.bubble { position: relative; padding: ${8 * SCALE}px ${12 * SCALE}px; border-radius: var(--r); background: var(--msg-in); color: #fff; font-size: ${MSG_FS}px; line-height: 1.45; overflow-wrap: break-word; word-break: normal; box-shadow: 0 1px ${3 * SCALE}px rgba(0,0,0,.25); max-width: 100%; }
 
 /* corner flow */
 .bubble-container.in.last-in-group .bubble                                               { border-top-left-radius: var(--r); border-bottom-left-radius: 0; }

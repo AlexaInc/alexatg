@@ -306,9 +306,13 @@ module.exports = function (bot, deps) {
               replysendercolor: rColor,
               entities, mediaBuffer,
               id: sender ? sender.id.toString() : '1',
-              isAbsoluteLast: i === fetched.length - 1
+              isAbsoluteLast: false
             });
           }
+        }
+        if (messagesToProcess.length > 0) {
+          messagesToProcess[messagesToProcess.length - 1].isAbsoluteLast = true;
+        }
         } catch (e) {
           console.error("Userbot quote error:", e);
         } finally {

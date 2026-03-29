@@ -217,12 +217,12 @@ module.exports = function (bot, deps) {
                     mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                   } else {
                     // Animated/Video: Loop through GramJS thumbs
-                    const priority = ['y', 'x', 'w', 'v', 'm'];
+                    const priority = ['y', 'x', 'w', 'v', 'm', 's'];
                     for (const p of priority) {
                       const thumb = doc.thumbs?.find(t => (t.type || t.size) === p);
                       if (thumb) {
-                        mediaBuffer = await client.downloadMedia(m.media, { thumbSize: p }).catch(() => null);
-                        if (mediaBuffer && mediaBuffer.length > 200) break;
+                        mediaBuffer = await client.downloadMedia(m.media, { thumbSize: thumb }).catch(() => null);
+                        if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
                     }
                   }

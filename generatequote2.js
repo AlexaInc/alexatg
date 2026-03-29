@@ -212,7 +212,7 @@ body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-
 .bubble-container.is-sticker { max-width: ${250 * SCALE}px; align-items: flex-end; }
 .bubble-container.is-sticker .bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
 .bubble-container.is-sticker .bubble::before { display: none !important; }
-.sticker-img { width: 100%; max-width: ${250 * SCALE}px; display: block; border-radius: ${8 * SCALE}px; }
+.sticker-img { width: ${220 * SCALE}px; display: block; border-radius: ${8 * SCALE}px; }
 .bubble-name { font-size: ${NAME_FS}px; font-weight: 600; margin-bottom: ${4 * SCALE}px; display: flex; align-items: center; gap: ${6 * SCALE}px; }
 .f-line { font-size: ${MSG_FS * 0.75}px; color: #64b5f6; margin-bottom: ${4 * SCALE}px; opacity: 0.9; }
 .premium-emoji { width: ${18 * SCALE}px; height: ${18 * SCALE}px; margin-left: 2px; }

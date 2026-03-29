@@ -204,23 +204,36 @@ module.exports = function (bot, deps) {
                 const doc = m.media.document;
                 const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
                 
-                if (doc && isSticker && doc.mimeType !== 'image/webp') {
-                  // Attempt multiple thumbnail sizes until one works
-                  const priority = ['y', 'x', 'w', 'v', 'm'];
-                  for (const p of priority) {
-                    if (doc.thumbs && doc.thumbs.some(t => t.type === p)) {
-                      mediaBuffer = await client.downloadMedia(m.media, { thumbSize: p }).catch(() => null);
-                      if (mediaBuffer && mediaBuffer.length > 100) break; 
+                // For the very 1st message, if it's a sticker, Bot API thumbnail is most reliable
+                if (i === 0 && targetMsg.sticker) {
+                  try {
+                    const link = await bot.getFileLink(targetMsg.sticker.thumbnail?.file_id || targetMsg.sticker.file_id);
+                    mediaBuffer = await downloadImage(link);
+                  } catch (e) {}
+                }
+
+                if (!mediaBuffer && doc && isSticker) {
+                  if (doc.mimeType === 'image/webp') {
+                    mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
+                  } else {
+                    // Animated/Video: Loop through GramJS thumbs
+                    const priority = ['y', 'x', 'w', 'v', 'm'];
+                    for (const p of priority) {
+                      const thumb = doc.thumbs?.find(t => (t.type || t.size) === p);
+                      if (thumb) {
+                        mediaBuffer = await client.downloadMedia(m.media, { thumbSize: p }).catch(() => null);
+                        if (mediaBuffer && mediaBuffer.length > 200) break;
+                      }
                     }
                   }
-                  // Last ditch: any thumb
-                  if (!mediaBuffer && doc.thumbs && doc.thumbs.length > 0) {
-                     mediaBuffer = await client.downloadMedia(m.media, { thumbSize: doc.thumbs[0].type }).catch(() => null);
-                  }
-                } else {
+                } 
+                
+                if (!mediaBuffer) {
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
-              } catch (e) { }
+              } catch (e) {
+                console.error("Userbot media download error:", e);
+              }
             }
 
             const entities = (m.entities || []).map(e => {
@@ -294,8 +307,8 @@ module.exports = function (bot, deps) {
         let mediaBuffer = null;
         if (targetMsg.sticker) {
           try {
-            const isAnimated = targetMsg.sticker.is_animated || targetMsg.sticker.is_video;
-            const fileId = (isAnimated && targetMsg.sticker.thumbnail) ? targetMsg.sticker.thumbnail.file_id : targetMsg.sticker.file_id;
+            const thumbObj = targetMsg.sticker.thumbnail || targetMsg.sticker.thumb;
+            const fileId = thumbObj ? thumbObj.file_id : targetMsg.sticker.file_id;
             const link = await bot.getFileLink(fileId);
             mediaBuffer = await downloadImage(link);
           } catch (e) { }

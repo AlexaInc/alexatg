@@ -150,22 +150,14 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         let mediaB64 = null;
         if (d.mediaBuffer) {
             try {
-                // Animation Safety: Check for Gzip (TGS) or JSON signatures before Sharp
-                const isGzip = d.mediaBuffer[0] === 0x1f && d.mediaBuffer[1] === 0x8b;
-                const isJson = d.mediaBuffer[0] === 0x7b; // '{'
-
-                if (isGzip || isJson) {
-                    throw new Error("TGS/JSON not supported by Sharp");
-                }
-
                 const mb = await sharp(d.mediaBuffer)
-                    .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
+                    .resize(1000, 1000, { fit: 'inside', kernel: 'lanczos3' })
                     .png()
                     .toBuffer();
                 mediaB64 = `data:image/png;base64,${mb.toString('base64')}`;
             } catch (err) {
-                // Silent fallback for animations/unsupported
-                mediaB64 = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkw0IDhVMTZMMTIgMjJMMjAgMTZWOFwxMiAyWiIgc3Ryb2tlPSIjN2Y5MWE0IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0xMiA2TDEwIDhMMTIgMTBMMTQgOEwxMiA2WiIgZmlsbD0iIzdmOTFhNCIvPjxwYXRoIGQ9Ik0xMiAxMkwxMCAxNEwxMiAxNkwxNCAxNEwxMiAxMloiIGZpbGw9IiM3ZjkxYTQiLz48L3N2Zz4=";
+                // Return null if all else fails
+                mediaB64 = null;
             }
         }
         const isSticker = !!d.mediaBuffer && (!d.message || !d.message.trim());
@@ -226,8 +218,10 @@ body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-
 
     const htmlBody = items.map(m => {
         let bInner = '';
-        if (m.isSticker) bInner = `<img src="${m.mediaB64}" class="sticker-img" />`;
-        else {
+        if (m.isSticker) {
+            if (m.mediaB64) bInner = `<img src="${m.mediaB64}" class="sticker-img" />`;
+            else bInner = `<div style="font-style:italic;color:#7f91a4;font-size:0.7em">[Animated/Video Sticker (failed to load frame)]</div>`;
+        } else {
             if (m.fName) bInner += `<div class="f-line">Forwarded from ${m.fName}</div>`;
             if (m.showName) bInner += `<div class="bubble-name" style="color:${m.color}">${m.nameHtml}${m.statusB64 ? `<img src="${m.statusB64}" class="premium-emoji"/>` : ''}</div>`;
             if (m.rName) bInner += `<div class="reply-block" style="border-left-color:${m.rColor}"><div class="reply-name" style="color:${m.rColor}">${m.rName}</div><div class="reply-text">${escapeHtml(m.rMsg)}</div></div>`;

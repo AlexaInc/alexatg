@@ -201,38 +201,38 @@ module.exports = function (bot, deps) {
             let mediaBuffer = null;
             if (m.media) {
               try {
-                const doc = m.media.document;
-                const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
-                
-                // For the very 1st message, if it's a sticker, Bot API thumbnail is most reliable
-                if (i === 0 && targetMsg.sticker) {
-                  try {
-                    const link = await bot.getFileLink(targetMsg.sticker.thumbnail?.file_id || targetMsg.sticker.file_id);
-                    mediaBuffer = await downloadImage(link);
-                  } catch (e) {}
+                // If it's the target message, the Bot API object is most reliable for thumbs
+                if (m.id === targetMsgId && targetMsg.sticker) {
+                  const thumb = targetMsg.sticker.thumbnail || targetMsg.sticker.thumb;
+                  const fileId = thumb ? thumb.file_id : targetMsg.sticker.file_id;
+                  const link = await bot.getFileLink(fileId).catch(() => null);
+                  if (link) mediaBuffer = await downloadImage(link);
                 }
 
-                if (!mediaBuffer && doc && isSticker) {
-                  if (doc.mimeType === 'image/webp') {
-                    mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
-                  } else {
-                    // Animated/Video: Loop through GramJS thumbs
-                    const priority = ['y', 'x', 'w', 'v', 'm', 's'];
+                if (!mediaBuffer && m.media.document) {
+                  const doc = m.media.document;
+                  const isSticker = doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
+                  
+                  if (isSticker && (doc.mimeType !== 'image/webp' || !doc.size)) {
+                    // Animated/Video: Find static thumb in GramJS
+                    const priority = ['v', 'm', 'y', 'x', 'w', 's'];
                     for (const p of priority) {
                       const thumb = doc.thumbs?.find(t => (t.type || t.size) === p);
                       if (thumb) {
-                        mediaBuffer = await client.downloadMedia(m.media, { thumbSize: thumb }).catch(() => null);
+                        mediaBuffer = await client.downloadMedia(thumb).catch(() => null);
                         if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
                     }
+                  } else {
+                    // Regular photo or static sticker
+                    mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                   }
-                } 
-                
-                if (!mediaBuffer) {
+                } else if (!mediaBuffer) {
+                  // Fallback for whatever else (photos etc)
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
               } catch (e) {
-                console.error("Userbot media download error:", e);
+                console.error("Media download error in loop:", e);
               }
             }
 

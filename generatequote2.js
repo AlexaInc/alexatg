@@ -97,9 +97,7 @@ async function getPremiumEmojiB64(id) {
 }
 
 async function msgToHtml(text, entities = []) {
-    // Smart Line Break: Force URLs and Mentions to start on a new line (even after emojis)
-    text = text.replace(/([^\n])(https?:\/\/|t\.me\/|@\w+)/gi, "$1\n$2");
-
+    if (!text) return '';
     const sorted = (entities || []).sort((a, b) => a.offset - b.offset || b.length - a.length);
     let tags = [];
     for (const e of sorted) {
@@ -130,6 +128,13 @@ async function msgToHtml(text, entities = []) {
 
         if (t.type === 'open') {
             const e = t.info;
+            // SMART BREAK BEFORE LINKS/MENTIONS/EMOJIS
+            if (e.type === 'url' || e.type === 'text_url' || e.type === 'mention' || e.type === 'bot_command' || e.type === 'custom_emoji') {
+                if (html.length > 0 && !html.endsWith('<br/>') && !html.endsWith(' ')) {
+                    html += '<br/>';
+                }
+            }
+
             if (e.type === 'bold') html += '<b>';
             else if (e.type === 'italic') html += '<i>';
             else if (e.type === 'underline') html += '<u>';
@@ -139,9 +144,7 @@ async function msgToHtml(text, entities = []) {
             else if (e.type === 'custom_emoji') {
                 const b64 = await getPremiumEmojiB64(e.custom_emoji_id);
                 if (b64) html += `<img src="${b64}" class="msg-emoji"/>`;
-                // SKIP THE UNDERLYING TEXT for custom emoji
                 cursor = e.offset + e.length;
-                // Skip the next closing tag for this entity since we manually advanced cursor
                 while (i + 1 < tags.length && tags[i + 1].info === e) { i++; }
             }
         } else {

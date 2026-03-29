@@ -180,7 +180,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     const SCALE = 4.5;
     const PP_SIZE = 38 * SCALE;
     const NAME_FS = 16 * SCALE;
-    const MSG_FS = 15.5 * SCALE;
+    const MSG_FS = 16 * SCALE;
 
     const rows = await Promise.all(msgList.map(async (d, idx) => {
         const name = `${d.firstName || ''} ${d.lastName || ''}`.trim() || 'User';
@@ -233,7 +233,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-serif; background: transparent; -webkit-font-smoothing: antialiased; }
 #wrap { display: inline-flex; flex-direction: column; gap: 0; padding: ${12 * SCALE}px; }
-.bubble-container { display: flex; align-items: flex-end; position: relative; max-width: ${230 * SCALE}px; }
+.bubble-container { display: flex; align-items: flex-end; position: relative; max-width: ${160 * SCALE}px; }
 .bubble-container.sender-break { margin-top: ${10 * SCALE}px; }
 .bubble-pp { width: ${PP_SIZE}px; height: ${PP_SIZE}px; border-radius: 50%; flex-shrink: 0; margin-right: ${10 * SCALE}px; background-size: cover; background-position: center; border: ${1 * SCALE}px solid rgba(255,255,255,0.05); }
 .bubble-pp.hidden { opacity: 0; pointer-events: none; }

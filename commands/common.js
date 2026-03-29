@@ -210,9 +210,9 @@ module.exports = function (bot, deps) {
                   if (doc.thumbs && doc.thumbs.length > 0) {
                     const priority = ['y', 'x', 'w', 'v', 'm', 's'];
                     for (const p of priority) {
-                      if (doc.thumbs.some(t => t.size === p)) { bestSize = p; break; }
+                      if (doc.thumbs.some(t => t.type === p)) { bestSize = p; break; }
                     }
-                    if (!bestSize) bestSize = doc.thumbs[doc.thumbs.length - 1].size;
+                    if (!bestSize) bestSize = doc.thumbs[doc.thumbs.length - 1].type || doc.thumbs[doc.thumbs.length - 1].size;
                   }
                   mediaBuffer = await client.downloadMedia(m.media, { thumbSize: bestSize }).catch(() => null);
                 } else {

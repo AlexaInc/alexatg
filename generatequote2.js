@@ -35,8 +35,10 @@ const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
 
 // ─── Colour helpers ───────────────────────────────────────────────────────────
 function getTelegramColor(id) {
-    const map = new Map([[0, '#FF516A'], [1, '#FF9442'], [2, '#C66FFF'], [3, '#50D892'], [4, '#64D4F5'], [5, '#5095ED'], [6, '#FF66A6'], [7, '#FF8280'], [8, '#EDD64E'], [9, '#C66FFF']]);
-    return map.get(id) || '#64b5f6';
+    const cid = (parseInt(id) || 0) % 7;
+    // Official Telegram Dark Mode colors: 0:Red, 1:Orange, 2:Purple, 3:Green, 4:Cyan, 5:Blue, 6:Pink
+    const map = ['#fb6169', '#ff9f4f', '#c07df0', '#53ed9d', '#56d3f2', '#50a7ea', '#f479a0'];
+    return map[cid] || '#50a7ea';
 }
 
 function escapeHtml(t) {
@@ -183,9 +185,11 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
                 mediaB64 = `data:image/png;base64,${mb.toString('base64')}`;
             } catch (err) {
                 console.error("Sharp media processing failed:", err.message);
+                // Placeholder for animated/failed stickers
+                mediaB64 = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTIgMkw0IDhWMTZMMTIgMjJMMjAgMTZWOFwxMiAyWiIgc3Ryb2tlPSIjN2Y5MWE0IiBzdHJva2Utd2lkdGg9IjEuNSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxwYXRoIGQ9Ik0xMiA2TDEwIDhMMTIgMTBMMTQgOEwxMiA2WiIgZmlsbD0iIzdmOTFhNCIvPjxwYXRoIGQ9Ik0xMiAxMkwxMCAxNEwxMiAxNkwxNCAxNEwxMiAxMloiIGZpbGw9IiM3ZjkxYTQiLz48L3N2Zz4=";
             }
         }
-        const isSticker = !!mediaB64 && (!d.message || !d.message.trim());
+        const isSticker = !!d.mediaBuffer && (!d.message || !d.message.trim());
 
         const rColor = getTelegramColor(d.replysendercolor || 0);
         const rName = d.replySender ? nameToHtml(d.replySender, rColor, NAME_FS * 0.85) : '';

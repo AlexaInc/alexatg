@@ -173,90 +173,103 @@ module.exports = function (bot, deps) {
 
     try {
       let messagesToProcess = [];
+      const client = await getUserbotClient();
 
-      if (count > 1) {
-        const client = await getUserbotClient();
-        if (client) {
-          try {
-            const chatEntity = await getJoinedEntity(client, bot, chatId);
-            const fetched = await client.getMessages(chatEntity, {
-              ids: Array.from({ length: count }, (_, i) => targetMsg.message_id + i)
+      if (client) {
+        try {
+          const chatEntity = await getJoinedEntity(client, bot, chatId);
+          const startId = targetMsg.message_id;
+          const fetched = await client.getMessages(chatEntity, {
+            ids: Array.from({ length: count }, (_, i) => startId + i)
+          });
+
+          for (let i = 0; i < fetched.length; i++) {
+            const m = fetched[i];
+            if (!m || (!m.message && !m.caption && !m.media)) continue;
+
+            const sender = m.sender || await client.getEntity(m.fromId).catch(() => null);
+
+            // 1. DOWNLOAD PHOTO VIA USERBOT (Avoids Bot API Timeout/DC errors)
+            let photo = null;
+            if (sender) {
+              try {
+                photo = await client.downloadProfilePhoto(sender).catch(() => null);
+              } catch (e) { }
+            }
+
+            // 2. DOWNLOAD MEDIA VIA USERBOT
+            let mediaBuffer = null;
+            if (m.media) {
+              try {
+                const doc = m.media.document;
+                const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
+                const needsThumb = isSticker && doc.mimeType !== 'image/webp';
+                mediaBuffer = await client.downloadMedia(m.media, needsThumb ? { thumbSize: 'v' } : undefined);
+              } catch (e) { }
+            }
+
+            const entities = (m.entities || []).map(e => {
+              let type = 'unknown';
+              if (e.className === 'MessageEntityBold') type = 'bold';
+              else if (e.className === 'MessageEntityItalic') type = 'italic';
+              else if (e.className === 'MessageEntityCode') type = 'code';
+              else if (e.className === 'MessageEntityCustomEmoji') type = 'custom_emoji';
+              else if (e.className === 'MessageEntityUrl' || e.className === 'MessageEntityTextUrl') type = 'url';
+              else if (e.className === 'MessageEntityMention') type = 'mention';
+              else if (e.className === 'MessageEntityBotCommand') type = 'bot_command';
+              return { type, offset: e.offset, length: e.length, custom_emoji_id: e.documentId?.toString() };
             });
 
-            for (let i = 0; i < fetched.length; i++) {
-              const m = fetched[i];
-              // Safe check for message or ANY media
-              if (!m || (!m.message && !m.caption && !m.media)) continue;
-
-              const sender = m.sender;
-              const senderId = m.senderId?.toString();
-              const photoUrl = senderId ? await getProfilePhoto(bot, senderId) : null;
-              const photo = photoUrl ? await downloadImage(photoUrl) : null;
-
-              let mediaBuffer = null;
-              if (m.media) {
+            // Forward info
+            let fName = null;
+            if (m.fwdFrom) {
+              if (m.fwdFrom.fromName) fName = m.fwdFrom.fromName;
+              else if (m.fwdFrom.fromId) {
                 try {
-                  const doc = m.media.document;
-                  const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
-                  const needsThumb = isSticker && doc.mimeType !== 'image/webp';
-                  mediaBuffer = await client.downloadMedia(m.media, needsThumb ? { thumbSize: 'v' } : undefined);
-                } catch (e) { }
+                  const fwdEntity = await client.getEntity(m.fwdFrom.fromId).catch(() => null);
+                  fName = fwdEntity ? (fwdEntity.title || `${fwdEntity.firstName || ''} ${fwdEntity.lastName || ''}`.trim()) : "Forwarded";
+                } catch (e) { fName = "Forwarded"; }
               }
-
-              const entities = (m.entities || []).map(e => {
-                let type = 'unknown';
-                if (e.className === 'MessageEntityBold') type = 'bold';
-                else if (e.className === 'MessageEntityItalic') type = 'italic';
-                else if (e.className === 'MessageEntityCode') type = 'code';
-                else if (e.className === 'MessageEntityCustomEmoji') type = 'custom_emoji';
-                else if (e.className === 'MessageEntityUrl' || e.className === 'MessageEntityTextUrl') type = 'url';
-                else if (e.className === 'MessageEntityMention') type = 'mention';
-                else if (e.className === 'MessageEntityBotCommand') type = 'bot_command';
-                return { type, offset: e.offset, length: e.length, custom_emoji_id: e.documentId?.toString() };
-              });
-
-              // Forward info
-              let fName = null;
-              if (m.fwdFrom) {
-                if (m.fwdFrom.fromName) fName = m.fwdFrom.fromName;
-                else if (m.fwdFrom.fromId?.className === 'PeerChannel') fName = "Channel";
-                else if (m.fwdFrom.fromId?.className === 'PeerUser') fName = "User";
-                else fName = "Forwarded";
-              }
-
-              // Reply info (only first message in chain)
-              let rUser = null, rText = null, rColor = null;
-              if (i === 0 && withReply && m.replyTo) {
-                try {
-                  const gfMsgs = await client.getMessages(chatEntity, { ids: [m.replyTo.replyToMsgId] });
-                  const gf = gfMsgs[0];
-                  if (gf) {
-                    const s = gf.sender;
-                    rUser = `${s?.firstName || ''} ${s?.lastName || ''}`.trim() || 'User';
-                    rText = gf.message || gf.caption || (gf.media ? "Media" : null);
-                    rColor = s?.color?.colorId || 0;
-                  }
-                } catch (e) { }
-              }
-
-              messagesToProcess.push({
-                firstName: sender?.firstName || 'User',
-                lastName: sender?.lastName || '',
-                customemojiid: sender?.emojiStatus?.documentId?.toString(),
-                message: m.message || m.caption || (m.media ? "" : " "), // empty text for media
-                nameColorId: sender?.color?.colorId || 0,
-                inputImageBuffer: photo,
-                forwardName: fName,
-                replySender: rUser,
-                replyMessage: rText,
-                replysendercolor: rColor,
-                entities, mediaBuffer
-              });
             }
-          } catch (e) { } finally { await client.disconnect().catch(() => { }); }
+
+            // Reply info (only first message in chain)
+            let rUser = null, rText = null, rColor = null;
+            if (i === 0 && withReply && m.replyTo) {
+              try {
+                const gfMsgs = await client.getMessages(chatEntity, { ids: [m.replyTo.replyToMsgId] });
+                const gf = gfMsgs[0];
+                if (gf) {
+                  const s = gf.sender || await client.getEntity(gf.fromId).catch(() => null);
+                  rUser = s ? (s.title || `${s.firstName || ''} ${s.lastName || ''}`.trim()) : 'User';
+                  rText = gf.message || gf.caption || (gf.media ? "Media" : null);
+                  rColor = s?.color?.colorId || 0;
+                }
+              } catch (e) { }
+            }
+
+            messagesToProcess.push({
+              firstName: sender ? (sender.firstName || sender.title || 'User') : 'User',
+              lastName: sender?.lastName || '',
+              customemojiid: sender?.emojiStatus?.documentId?.toString(),
+              message: m.message || m.caption || (m.media ? "" : " "),
+              nameColorId: sender?.color?.colorId || 0,
+              inputImageBuffer: photo,
+              forwardName: fName,
+              replySender: rUser,
+              replyMessage: rText,
+              replysendercolor: rColor,
+              entities, mediaBuffer,
+              id: sender ? sender.id.toString() : '1'
+            });
+          }
+        } catch (e) {
+          console.error("Userbot quote error:", e);
+        } finally {
+          await client.disconnect().catch(() => { });
         }
       }
 
+      // FALLBACK TO BOT API ONLY IF USERBOT FAILED OR IS UNAVAILABLE
       if (messagesToProcess.length === 0) {
         const from = targetMsg.from;
         const photoUrl = await getProfilePhoto(bot, from.id);
@@ -266,10 +279,7 @@ module.exports = function (bot, deps) {
         let mediaBuffer = null;
         if (targetMsg.sticker) {
           try {
-            // Animated or Video stickers can't be rendered directly, so we use the static thumbnail
-            const isAnimated = targetMsg.sticker.is_animated || targetMsg.sticker.is_video;
-            const fileId = (isAnimated && targetMsg.sticker.thumbnail) ? targetMsg.sticker.thumbnail.file_id : targetMsg.sticker.file_id;
-            const stickerLink = await bot.getFileLink(fileId);
+            const stickerLink = await bot.getFileLink(targetMsg.sticker.file_id);
             mediaBuffer = await downloadImage(stickerLink);
           } catch (e) { }
         }
@@ -284,7 +294,7 @@ module.exports = function (bot, deps) {
           const rf = targetMsg.reply_to_message.from;
           rUser = `${rf.first_name} ${rf.last_name || ''}`.trim() || 'User';
           rText = targetMsg.reply_to_message.text || targetMsg.reply_to_message.caption || (targetMsg.reply_to_message.sticker ? "Sticker" : "Media");
-          rColor = rf.id % 7; // simplified
+          rColor = rf.id % 7;
         }
 
         messagesToProcess.push({
@@ -299,7 +309,8 @@ module.exports = function (bot, deps) {
           replyMessage: rText,
           replysendercolor: rColor,
           entities: targetMsg.entities || targetMsg.caption_entities || [],
-          mediaBuffer
+          mediaBuffer,
+          id: from.id.toString()
         });
       }
 

@@ -186,14 +186,29 @@ module.exports = function (bot, deps) {
           }
 
           const fetched = await client.getMessages(chatEntity, { ids: msgIds });
+          const colorCache = new Map();
 
           for (let i = 0; i < fetched.length; i++) {
             const m = fetched[i];
             if (!m || (!m.message && !m.caption && !m.media)) continue;
 
             const sender = m.sender || await client.getEntity(m.fromId).catch(() => null);
+            const senderIdStr = m.fromId?.userId?.toString() || m.fromId?.toString() || sender?.id?.toString();
 
-            // 1. DOWNLOAD PHOTO VIA USERBOT (Avoids Bot API Timeout/DC errors)
+            // 1. FETCH COLOR VIA BOT API (Most accurate)
+            let nColorId = 0;
+            if (senderIdStr) {
+              if (colorCache.has(senderIdStr)) nColorId = colorCache.get(senderIdStr);
+              else {
+                try {
+                  const cm = await bot.getChatMember(chatId, senderIdStr).catch(() => null);
+                  nColorId = cm?.user?.accent_color_id ?? sender?.accentColorId ?? sender?.color?.colorId ?? 0;
+                  colorCache.set(senderIdStr, nColorId);
+                } catch (e) { }
+              }
+            }
+
+            // 2. DOWNLOAD PHOTO VIA USERBOT
             let photo = null;
             if (sender) {
               try {
@@ -278,17 +293,28 @@ module.exports = function (bot, deps) {
               }
             }
 
-            // Reply info (any message in chain can now show its reply context if /q r is used)
-            let rUser = null, rText = null, rColor = null;
+            // 4. FETCH REPLY INFO AND COLOR
+            let rUser = null, rText = null, rColor = 0;
             if (withReply && m.replyTo) {
               try {
                 const gfMsgs = await client.getMessages(chatEntity, { ids: [m.replyTo.replyToMsgId] });
                 const gf = gfMsgs[0];
                 if (gf) {
                   const s = gf.sender || await client.getEntity(gf.fromId).catch(() => null);
+                  const ridStr = gf.fromId?.userId?.toString() || gf.fromId?.toString() || s?.id?.toString();
                   rUser = s ? (s.title || `${s.firstName || ''} ${s.lastName || ''}`.trim()) : 'User';
                   rText = gf.message || gf.caption || (gf.media ? "Media" : null);
-                  rColor = s?.accentColorId ?? s?.color?.colorId ?? 0;
+
+                  if (ridStr) {
+                    if (colorCache.has(ridStr)) rColor = colorCache.get(ridStr);
+                    else {
+                      try {
+                        const rcm = await bot.getChatMember(chatId, ridStr).catch(() => null);
+                        rColor = rcm?.user?.accent_color_id ?? s?.accentColorId ?? s?.color?.colorId ?? 0;
+                        colorCache.set(ridStr, rColor);
+                      } catch (e) { rColor = 0; }
+                    }
+                  }
                 }
               } catch (e) { }
             }
@@ -298,12 +324,12 @@ module.exports = function (bot, deps) {
               lastName: sender?.lastName || '',
               customemojiid: sender?.emojiStatus?.documentId?.toString(),
               message: m.message || m.caption || (m.media ? "" : " "),
-              nameColorId: sender?.accentColorId ?? sender?.color?.colorId ?? 0,
+              nameColorId: nColorId,
               inputImageBuffer: photo,
               forwardName: fName,
               replySender: rUser,
               replyMessage: rText,
-              replysendercolor: rColor ?? s?.accentColorId ?? s?.color?.colorId ?? 0,
+              replysendercolor: rColor,
               entities, mediaBuffer,
               id: sender ? sender.id.toString() : '1',
               isAbsoluteLast: false

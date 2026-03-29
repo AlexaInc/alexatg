@@ -43,17 +43,41 @@ function escapeHtml(t) {
     return t ? t.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;") : '';
 }
 
-// ─── node-canvas: per-character name rendering (Unicode accuracy) ─────────────
-function renderCharImg(char, fontSize, color) {
+// ─── HTML for sender name (whole-chunk canvas + twemoji) ─────────────────────
+function renderChunkImg(text, fontSize, color) {
     const tmp = createCanvas(1, 1); const tc = tmp.getContext('2d');
     tc.font = `600 ${fontSize}px ${CANVAS_FONT}`;
-    const w = Math.max(1, tc.measureText(char).width);
-    const h = Math.max(1, fontSize * 1.3);
+    const w = Math.max(1, tc.measureText(text).width);
+    const h = Math.max(1, fontSize * 1.4);
     const cv = createCanvas(w, h); const ctx = cv.getContext('2d');
     ctx.font = `600 ${fontSize}px ${CANVAS_FONT}`;
     ctx.fillStyle = color; ctx.textBaseline = 'middle';
-    ctx.fillText(char, 0, h / 2);
+    ctx.fillText(text, 0, h / 2);
     return `data:image/png;base64,${cv.toBuffer('image/png').toString('base64')}`;
+}
+
+function nameToHtml(text, color, fontSize) {
+    if (!text) return '';
+    const seg = new Intl.Segmenter();
+    let res = '';
+    let chunk = '';
+
+    const flushChunk = () => {
+        if (!chunk) return;
+        res += `<img src="${renderChunkImg(chunk, fontSize, color)}" style="height:1em;vertical-align:middle;margin:0;padding:0;display:inline-block;"/>`;
+        chunk = '';
+    };
+
+    for (const { segment: c } of seg.segment(text)) {
+        if (IS_EMOJI.test(c)) {
+            flushChunk(); // render accumulated text first
+            res += `<img src="${toTwemojiUrl(c)}" class="emoji" onerror="this.style.display='none'"/>`;
+        } else {
+            chunk += c; // accumulate into one chunk
+        }
+    }
+    flushChunk(); // flush any remaining text
+    return res;
 }
 
 // ─── Twemoji URL helper ───────────────────────────────────────────────────────
@@ -72,22 +96,6 @@ function toTwemojiUrl(emoji) {
 
 const IS_EMOJI = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base})/u;
 
-// ─── HTML for sender name (canvas per-char + twemoji) ────────────────────────
-function nameToHtml(text, color, fontSize) {
-    if (!text) return '';
-    const seg = new Intl.Segmenter();
-    let res = '';
-    for (const { segment: c } of seg.segment(text)) {
-        if (IS_EMOJI.test(c)) {
-            res += `<img src="${toTwemojiUrl(c)}" class="emoji" onerror="this.style.display='none'"/>`;
-        } else if (/^\s+$/.test(c)) {
-            res += `<span style="white-space:pre">${c}</span>`;
-        } else {
-            res += `<img src="${renderCharImg(c, fontSize, color)}" style="height:1em;vertical-align:middle"/>`;
-        }
-    }
-    return res;
-}
 
 // ─── Premium / Custom Emoji cache ────────────────────────────────────────────
 const ECACHE = new Map();

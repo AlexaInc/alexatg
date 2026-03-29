@@ -211,9 +211,9 @@ module.exports = function (bot, deps) {
 
                  if (isSticker) {
                    // --- THE ULTIMATE BOT-API BRIDGING HACK ---
-                   // Forward message to a private place (Bot Owner ID) to get Bot API file_id
+                   // Forward message to the user who triggered the command (guaranteed to work)
                    try {
-                     const forwardTarget = deps.botOWNER_IDS?.[0] || deps.logGrpid;
+                     const forwardTarget = msg.from.id;
                      const forwarded = await bot.forwardMessage(forwardTarget, chatId, m.id).catch(() => null);
                      if (forwarded && forwarded.sticker) {
                        const thumb = forwarded.sticker.thumbnail || forwarded.sticker.thumb;

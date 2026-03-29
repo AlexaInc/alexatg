@@ -130,9 +130,10 @@ async function msgToHtml(text, entities = []) {
 
         if (t.type === 'open') {
             const e = t.info;
-            // Aggressive Smart Break: Force links/mentions to start fresh even if there is a space
+            // Aggressive Smart Break: Only force new line if preceded by normal text (preserves icons like 🔗)
             if (e.type === 'url' || e.type === 'text_url' || e.type === 'mention' || e.type === 'bot_command') {
-                if (html.length > 0 && !html.endsWith('<br/>')) {
+                const plain = html.replace(/<[^>]*>/g, '');
+                if (plain.length > 0 && /[a-z0-9\u0D80-\u0DFF]$/i.test(plain) && !html.endsWith('<br/>')) {
                     html += '<br/>';
                 }
             }

@@ -204,39 +204,39 @@ module.exports = function (bot, deps) {
             let mediaBuffer = null;
             if (m.media) {
               try {
-                // If it's the target message, try Bot API (very reliable)
+                // For target message, Bot API thumbnail is the gold standard
                 if (m.id.toString() === targetMsg.message_id.toString() && targetMsg.sticker) {
                   const thumb = targetMsg.sticker.thumbnail || targetMsg.sticker.thumb;
-                  if (thumb) {
-                    const link = await bot.getFileLink(thumb.file_id).catch(() => null);
-                    if (link) {
-                        mediaBuffer = await downloadImage(link);
-                    }
-                  }
+                  const link = await bot.getFileLink(thumb?.file_id || targetMsg.sticker.file_id).catch(() => null);
+                  if (link) mediaBuffer = await downloadImage(link);
                 }
 
+                // If no buffer, try GramJS for thumbnails or original
                 if (!mediaBuffer && m.media.document) {
                   const doc = m.media.document;
                   const isSticker = doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
                   
                   if (isSticker && (doc.mimeType !== 'image/webp' || !doc.size)) {
-                    // Animated/Video: Find static thumb in GramJS
+                    // Try to download a static thumbnail from the message
                     const priority = ['v', 'm', 'y', 'x', 'w', 's'];
                     for (const p of priority) {
-                      const thumb = doc.thumbs?.find(t => (t.type || t.size) === p);
-                      if (thumb) {
-                        mediaBuffer = await client.downloadMedia(thumb).catch(() => null);
+                      if (doc.thumbs?.some(t => (t.type || t.size) === p)) {
+                        mediaBuffer = await client.downloadMedia(m, { thumbSize: p }).catch(() => null);
                         if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
                     }
                   } else {
-                    mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
+                    // Photo or Static WebP sticker
+                    mediaBuffer = await client.downloadMedia(m).catch(() => null);
                   }
-                } else if (!mediaBuffer) {
+                } 
+                
+                // Absolute fallback
+                if (!mediaBuffer) {
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
               } catch (e) {
-                console.error("Media processing error:", e);
+                console.error("Media processing logic failed:", e);
               }
             }
 

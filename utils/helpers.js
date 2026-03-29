@@ -478,6 +478,7 @@ async function getUserbotClient() {
       retryDelay: 2000,
       receiveUpdates: false,
       autoReconnect: true,
+      useIPV6: false,
     });
     await client.connect();
     return client;

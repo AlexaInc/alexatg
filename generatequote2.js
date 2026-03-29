@@ -62,13 +62,13 @@ function nameToHtml(text, color, fontSize) {
     let res = ''; let chunk = '';
     const flushChunk = () => { if (!chunk) return; res += `<img src="${renderChunkImg(chunk, fontSize, color)}" style="height:1em;vertical-align:middle;margin:0;padding:0;display:inline-block;"/>`; chunk = ''; };
     for (const { segment: c } of seg.segment(text)) {
-        if (IS_EMOJI.test(c)) { flushChunk(); res += `<img src="${toTwemojiUrl(c)}" class="emoji" onerror="this.style.display='none'"/>`; }
+        if (IS_EMOJI.test(c)) { flushChunk(); res += `<img src="${toAppleEmojiUrl(c)}" class="emoji" onerror="this.style.display='none'"/>`; }
         else { chunk += c; }
     }
     flushChunk(); return res;
 }
 
-function toTwemojiUrl(emoji) {
+function toAppleEmojiUrl(emoji) {
     const r = []; let c = 0, p = 0;
     for (let i = 0; i < emoji.length; i++) {
         c = emoji.charCodeAt(i);
@@ -77,8 +77,9 @@ function toTwemojiUrl(emoji) {
         else r.push(c.toString(16));
     }
     let cp = r.join('-');
+    // Standardize codepoint format for apple-datasource
     if (!cp.includes('200d')) cp = cp.replace(/-fe0f/g, '');
-    return `https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.0.3/assets/svg/${cp}.svg`;
+    return `https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/${cp}.png`;
 }
 const IS_EMOJI = /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base})/u;
 
@@ -113,7 +114,7 @@ async function msgToHtml(text, entities = []) {
             if (sub.startsWith('<span')) return sub;
             let out = '';
             for (const { segment: c } of seg.segment(sub)) {
-                if (IS_EMOJI.test(c)) out += `<img src="${toTwemojiUrl(c)}" class="emoji"/>`;
+                if (IS_EMOJI.test(c)) out += `<img src="${toAppleEmojiUrl(c)}" class="emoji"/>`;
                 else out += escapeHtml(c);
             }
             return out.replace(/\n/g, '<br/>');

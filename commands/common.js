@@ -1,3 +1,4 @@
+const { Api } = require('telegram');
 const callToAi = require('../aii.js');
 const createQuoteSticker = require('../generatequote2');
 
@@ -217,11 +218,13 @@ module.exports = function (bot, deps) {
                   const isSticker = doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
                   
                   if (isSticker && (doc.mimeType !== 'image/webp' || !doc.size)) {
-                    // Try to download a static thumbnail from the message
+                    // Animated/Video: Find static thumb using raw location
                     const priority = ['v', 'm', 'y', 'x', 'w', 's'];
                     for (const p of priority) {
-                      if (doc.thumbs?.some(t => (t.type || t.size) === p)) {
-                        mediaBuffer = await client.downloadMedia(m, { thumbSize: p }).catch(() => null);
+                      const thumb = doc.thumbs?.find(t => (t.type || t.size) === p);
+                      if (thumb) {
+                        // Use raw downloadFile for higher success rate
+                        mediaBuffer = await client.downloadFile(thumb).catch(() => null);
                         if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
                     }

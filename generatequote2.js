@@ -130,13 +130,13 @@ async function msgToHtml(text, entities = []) {
 
     // 2. For each plain-text segment: twemoji + links
     const seg = new Intl.Segmenter();
-    const LINK_RE = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|\/\w+(?:@\w+)?)/g;
+    // Negative lookbehind prevents matching /path inside t.me/path URLs
+    const LINK_RE = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|(?<![\w.])\/\w+(?:@\w+)?)/g;
     return parts.map(part => {
         if (part.startsWith('<img')) return part;
-        // highlight links first (on raw text, safe)
         const highlighted = part.replace(LINK_RE, p => `<span class="link">${escapeHtml(p)}</span>`);
-        // now replace emojis inside non-span portions
-        return highlighted.split(/(<span[^>]*>.*?<\/span>)/s).map(sub => {
+        // Split WITHOUT /s flag so . does NOT cross newlines
+        return highlighted.split(/(<span[^>]*>[^<]*<\/span>)/).map(sub => {
             if (sub.startsWith('<span')) return sub;
             let out = '';
             for (const { segment: c } of seg.segment(sub)) {
@@ -217,7 +217,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     });
 
     // ── Build HTML using exact template CSS ───────────────────────────────────
-    const MSG_IN = '#182533';
+    const MSG_IN = '#111112';
     const BGC = 'transparent';
 
     const css = `
@@ -285,6 +285,7 @@ body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-
         let bubbleInner = '';
 
         if (m.isSticker) {
+            // Pure sticker: transparent bubble, full image
             bubbleInner = `<img src="${m.mediaB64}" class="sticker-img" />`;
         } else {
             if (m.showName) {
@@ -292,6 +293,10 @@ body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-
             }
             if (m.rName) {
                 bubbleInner += `<div class="reply-block" style="border-left-color:${m.rColor}"><div class="reply-name" style="color:${m.rColor}">${m.rName}</div><div class="reply-text">${escapeHtml(m.rMsg)}</div></div>`;
+            }
+            // Sticker/media WITH caption (mediaB64 present but message is also present)
+            if (m.mediaB64) {
+                bubbleInner += `<img src="${m.mediaB64}" class="sticker-img" style="margin-bottom:${4 * SCALE}px;" />`;
             }
             if (m.msgHtml) {
                 bubbleInner += `<div class="bubble-content">${m.msgHtml}</div>`;

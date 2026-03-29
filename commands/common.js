@@ -203,13 +203,19 @@ module.exports = function (bot, deps) {
               try {
                 const doc = m.media.document;
                 const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
-                const needsThumb = isSticker && doc.mimeType !== 'image/webp';
+                if (doc && doc.mimeType !== 'image/webp' && isSticker) {
+                  // It's an animated/video sticker. Let's find the BEST thumbnail
+                  let largestThumb = null;
+                  if (doc.thumbs && doc.thumbs.length > 0) {
+                    // Sort by size or just pick the last one (usually largest)
+                    largestThumb = doc.thumbs[doc.thumbs.length - 1];
+                  }
+                  if (largestThumb) {
+                    mediaBuffer = await client.downloadMedia(m.media, { thumbSize: largestThumb.size }).catch(() => null);
+                  }
+                }
 
-                if (needsThumb) {
-                  // Try to get 'v' size thumb, fallback to 'm'
-                  mediaBuffer = await client.downloadMedia(m.media, { thumbSize: 'v' }).catch(() => null);
-                  if (!mediaBuffer) mediaBuffer = await client.downloadMedia(m.media, { thumbSize: 'm' }).catch(() => null);
-                } else {
+                if (!mediaBuffer) {
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
               } catch (e) { }

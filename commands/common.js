@@ -205,41 +205,51 @@ module.exports = function (bot, deps) {
             let mediaBuffer = null;
             if (m.media) {
               try {
-                // For target message, Bot API thumbnail is the gold standard
-                if (m.id.toString() === targetMsg.message_id.toString() && targetMsg.sticker) {
-                  const thumb = targetMsg.sticker.thumbnail || targetMsg.sticker.thumb;
-                  const link = await bot.getFileLink(thumb?.file_id || targetMsg.sticker.file_id).catch(() => null);
-                  if (link) mediaBuffer = await downloadImage(link);
+                // Determine if it's a sticker (via GramJS)
+                const doc = m.media.document;
+                const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
+
+                if (isSticker) {
+                   // --- THE ULTIMATE BOT-API BRIDGING HACK ---
+                   // Forward message to log group to get the Bot API object + file_id
+                   try {
+                     const forwarded = await bot.forwardMessage(deps.logGrpid, chatId, m.id).catch(() => null);
+                     if (forwarded && forwarded.sticker) {
+                       const thumb = forwarded.sticker.thumbnail || forwarded.sticker.thumb;
+                       const fId = thumb ? thumb.file_id : forwarded.sticker.file_id;
+                       const link = await bot.getFileLink(fId).catch(() => null);
+                       if (link) {
+                          mediaBuffer = await downloadImage(link);
+                       }
+                     }
+                     // Clean up log group
+                     if (forwarded) bot.deleteMessage(deps.logGrpid, forwarded.message_id).catch(() => {});
+                   } catch (e) {}
                 }
 
-                // If no buffer, try GramJS for thumbnails or original
-                if (!mediaBuffer && m.media.document) {
-                  const doc = m.media.document;
-                  const isSticker = doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
-                  
-                  if (isSticker && (doc.mimeType !== 'image/webp' || !doc.size)) {
-                    // Animated/Video: Find static thumb using raw location
+                // If still no buffer, try GramJS for thumbnails or original
+                if (!mediaBuffer && doc) {
+                  const isStickerDoc = doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
+                  if (isStickerDoc && (doc.mimeType !== 'image/webp' || !doc.size)) {
                     const priority = ['v', 'm', 'y', 'x', 'w', 's'];
                     for (const p of priority) {
                       const thumb = doc.thumbs?.find(t => (t.type || t.size) === p);
                       if (thumb) {
-                        // Use raw downloadFile for higher success rate
                         mediaBuffer = await client.downloadFile(thumb).catch(() => null);
                         if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
                     }
                   } else {
-                    // Photo or Static WebP sticker
                     mediaBuffer = await client.downloadMedia(m).catch(() => null);
                   }
                 } 
                 
-                // Absolute fallback
+                // Final fallback
                 if (!mediaBuffer) {
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
               } catch (e) {
-                console.error("Media processing logic failed:", e);
+                console.error("Critical media bridge failed:", e);
               }
             }
 

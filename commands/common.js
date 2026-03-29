@@ -292,18 +292,14 @@ module.exports = function (bot, deps) {
         let mediaBuffer = null;
         if (targetMsg.sticker) {
           try {
-            // USER'S RECOMMENDED BOT API STRATEGY
+            // USER-SUGGESTED BOT API STRATEGY (V2)
             const thumbObj = targetMsg.sticker.thumbnail || targetMsg.sticker.thumb;
             if (thumbObj) {
-              const fileId = thumbObj.file_id;
-              const sFile = await bot.getFile(fileId);
-              const sUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${sFile.file_path}`;
-              mediaBuffer = await downloadImage(sUrl);
+              const link = await bot.getFileLink(thumbObj.file_id);
+              mediaBuffer = await downloadImage(link);
             } else if (!targetMsg.sticker.is_animated && !targetMsg.sticker.is_video) {
-              // Static sticker: get original
-              const sFile = await bot.getFile(targetMsg.sticker.file_id);
-              const sUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${sFile.file_path}`;
-              mediaBuffer = await downloadImage(sUrl);
+              const link = await bot.getFileLink(targetMsg.sticker.file_id);
+              mediaBuffer = await downloadImage(link);
             }
           } catch (e) { }
         }

@@ -103,29 +103,14 @@ async function getBuffer(url) {
   }
 }
 
-function downloadImage(url) {
-  return new Promise((resolve, reject) => {
-    const options = { family: 4 };
-    const request = https.get(url, options, (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`Failed to get image, status code: ${response.statusCode}`));
-        return;
-      }
-
-      const data = [];
-      response.on('data', (chunk) => {
-        data.push(chunk);
-      });
-
-      response.on('end', () => {
-        resolve(Buffer.concat(data));
-      });
-    });
-
-    request.on('error', (err) => {
-      reject(err);
-    });
-  });
+async function downloadImage(url) {
+  try {
+    const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000, family: 4 });
+    return Buffer.from(response.data);
+  } catch (err) {
+    console.error("downloadImage failed for:", url, err.message);
+    return null;
+  }
 }
 
 async function getProfilePhoto(bot, userId) {

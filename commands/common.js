@@ -197,33 +197,25 @@ module.exports = function (bot, deps) {
               } catch (e) { }
             }
 
-            // 2. DOWNLOAD MEDIA VIA USERBOT
+            // 2. DOWNLOAD MEDIA (Stickers)
+            // Use Bot API for sticker thumbnails as it's more robust for static extraction
             let mediaBuffer = null;
             if (m.media) {
               try {
                 const doc = m.media.document;
                 const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
 
-                if (doc && isSticker && doc.mimeType !== 'image/webp') {
-                  // Try to pick a real image thumbnail (codes like 'v', 'm', 'y', 'x')
-                  let bestThumb = null;
-                  if (doc.thumbs && doc.thumbs.length > 0) {
-                    // Prefer high-res letters like 'y', 'x', 'w' over 'v', 'm', 's'
-                    const priority = ['y', 'x', 'w', 'v', 'm', 's'];
-                    for (const p of priority) {
-                      const found = doc.thumbs.find(t => t.size === p);
-                      if (found) { bestThumb = found; break; }
-                    }
-                    // If no priority letter, take last one
-                    if (!bestThumb) bestThumb = doc.thumbs[doc.thumbs.length - 1];
+                if (doc && isSticker) {
+                  // Attempt Bot API thumbnail fetch first for animations
+                  try {
+                    const sFile = await bot.getFile(doc.id.toString());
+                    const sLink = await bot.getFileLink(sFile.file_id);
+                    mediaBuffer = await downloadImage(sLink);
+                  } catch (e) {
+                    // Fallback to GramJS if Bot API fails
+                    mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                   }
-
-                  if (bestThumb) {
-                    mediaBuffer = await client.downloadMedia(m.media, { thumbSize: bestThumb.size }).catch(() => null);
-                  }
-                }
-
-                if (!mediaBuffer) {
+                } else if (m.media.className === 'MessageMediaPhoto') {
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
               } catch (e) { }

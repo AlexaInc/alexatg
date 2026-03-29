@@ -1,0 +1,18 @@
+[
+  {
+    "role": "user",
+    "content": "hi"
+  },
+  {
+    "role": "assistant",
+    "content": "Hello! How can I assist you today?"
+  },
+  {
+    "role": "user",
+    "content": "nalawili gi"
+  },
+  {
+    "role": "assistant",
+    "content": "Ginoo kaayo! (That's a nice way to say \"hello\" in Cebuano!) What can I help you with today?"
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "dependencies": {
+    "axios": "1.13.6",
+    "baileys": "github:nstar-y/bail",
+    "canvas": "^3.2.0",
+    "dotenv": "^17.3.1",
+    "filtermatics": "^1.0.3",
+    "fs": "^0.0.1-security",
+    "https-proxy-agent": "7.0.6",
+    "input": "^1.0.1",
+    "moment-timezone": "^0.6.0",
+    "mongoose": "^8.23.0",
+    "node-fetch": "^2.7.0",
+    "node-telegram-bot-api": "^0.66.0",
+    "puppeteer": "^24.29.1",
+    "sharp": "^0.34.5",
+    "socks-proxy-agent": "8.0.5",
+    "telegram": "^2.26.22",
+    "ws": "^8.19.0"
+  }
+}

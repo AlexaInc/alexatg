@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Telegram-Style Chat Component</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="chat-wrapper">
+        <div id="chat-messages" class="chat-container">
+            <!-- Bubbles will render here in the center -->
+        </div>
+    </div>
+
+    <script src="chat.js"></script>
+    <script>
+        const chat = new TelegramBubble('chat-messages');
+
+        const demoMessages = [
+            { name: "John Doe", pp: "assets/avatar.png", premiumEmoji: "assets/avatar.png", message: "Hey! Have you seen the new update?", type: "text", isOwner: false },
+            { name: "John Doe", pp: "assets/avatar.png", premiumEmoji: "assets/avatar.png", message: "I just sent you a few more details.", type: "text", isOwner: false },
+            { name: "Jane Smith", pp: "assets/sticker.png", message: "Yes, I saw it!", type: "text", isOwner: false },
+            { name: "Jane Smith", pp: "assets/sticker.png", message: "Looks really good to me.", type: "text", isOwner: false },
+            { name: "John Doe", pp: "assets/avatar.png", premiumEmoji: "assets/avatar.png", message: "It looks amazing!", type: "text", isOwner: false },
+            { name: "John Doe", pp: "assets/avatar.png", premiumEmoji: "assets/avatar.png", message: "", type: "sticker", src: "assets/sticker.png", isOwner: false }
+        ];
+
+        demoMessages.forEach((msg, idx) => {
+            setTimeout(() => {
+                chat.addBubble(msg);
+            }, idx * 400);
+        });
+    </script>
+</body>
+
+</html>

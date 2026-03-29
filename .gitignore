@@ -1,0 +1,25 @@
+# Ignore node modules
+node_modules/
+
+# Ignore environment variables
+.env
+
+# Optional ignore logs, system files, etc.
+*.log
+.DS_Store
+
+# Ignore specific JSON files
+ids.json
+groups.json
+users.json
+session.txt
+
+# Ignore folders
+shipping/
+filters/
+aaa/
+emoji_status/
+
+# Ignore files
+ex.js
+users.js

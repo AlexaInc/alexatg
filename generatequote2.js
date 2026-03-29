@@ -35,9 +35,8 @@ const BOT_TOKEN = '7961409784:AAH34SqtPohk5YydJVH9Fw9BfsxnSsAPIf8';
 
 // ─── Colour helpers ───────────────────────────────────────────────────────────
 function getTelegramColor(id) {
-    const cid = (parseInt(id) || 0) % 8;
-    const map = ['#fb6169', '#ff9f4f', '#c07df0', '#53ed9d', '#56d3f2', '#50a7ea', '#f479a0', '#64b5f6'];
-    return map[cid] || '#50a7ea';
+    const map = new Map([[0, '#FF516A'], [1, '#FF9442'], [2, '#C66FFF'], [3, '#50D892'], [4, '#64D4F5'], [5, '#5095ED'], [6, '#FF66A6'], [7, '#FF8280'], [8, '#EDD64E'], [9, '#C66FFF']]);
+    return map.get(parseInt(id) % 10) || '#00ffff';
 }
 
 function escapeHtml(t) {

@@ -209,23 +209,23 @@ module.exports = function (bot, deps) {
                 const doc = m.media.document;
                 const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
 
-                 if (isSticker) {
-                   // --- THE ULTIMATE BOT-API BRIDGING HACK ---
-                   // Forward message to the user who triggered the command (guaranteed to work)
-                   try {
-                     const forwardTarget = msg.from.id;
-                     const forwarded = await bot.forwardMessage(forwardTarget, chatId, m.id).catch(() => null);
-                     if (forwarded && forwarded.sticker) {
-                       const thumb = forwarded.sticker.thumbnail || forwarded.sticker.thumb;
-                       const fId = thumb ? thumb.file_id : forwarded.sticker.file_id;
-                       const link = await bot.getFileLink(fId).catch(() => null);
-                       if (link) {
-                          mediaBuffer = await downloadImage(link);
-                       }
-                     }
-                     // Clean up
-                     if (forwarded) bot.deleteMessage(forwardTarget, forwarded.message_id).catch(() => {});
-                   } catch (e) {}
+                if (isSticker) {
+                  // --- THE ULTIMATE BOT-API BRIDGING HACK ---
+                  // Forward message to the user who triggered the command (guaranteed to work)
+                  try {
+                    const forwardTarget = msg.from.id;
+                    const forwarded = await bot.forwardMessage(forwardTarget, chatId, m.id).catch(() => null);
+                    if (forwarded && forwarded.sticker) {
+                      const thumb = forwarded.sticker.thumbnail || forwarded.sticker.thumb;
+                      const fId = thumb ? thumb.file_id : forwarded.sticker.file_id;
+                      const link = await bot.getFileLink(fId).catch(() => null);
+                      if (link) {
+                        mediaBuffer = await downloadImage(link);
+                      }
+                    }
+                    // Clean up
+                    if (forwarded) bot.deleteMessage(forwardTarget, forwarded.message_id).catch(() => { });
+                  } catch (e) { }
                 }
 
                 // If still no buffer, try GramJS for thumbnails or original
@@ -243,8 +243,8 @@ module.exports = function (bot, deps) {
                   } else {
                     mediaBuffer = await client.downloadMedia(m).catch(() => null);
                   }
-                } 
-                
+                }
+
                 // Final fallback
                 if (!mediaBuffer) {
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
@@ -298,12 +298,12 @@ module.exports = function (bot, deps) {
               lastName: sender?.lastName || '',
               customemojiid: sender?.emojiStatus?.documentId?.toString(),
               message: m.message || m.caption || (m.media ? "" : " "),
-              nameColorId: sender?.color?.colorId || 0,
+              nameColorId: sender?.accentColorId ?? sender?.color?.colorId ?? 0,
               inputImageBuffer: photo,
               forwardName: fName,
               replySender: rUser,
               replyMessage: rText,
-              replysendercolor: rColor,
+              replysendercolor: rColor ?? s?.accentColorId ?? s?.color?.colorId ?? 0,
               entities, mediaBuffer,
               id: sender ? sender.id.toString() : '1',
               isAbsoluteLast: false

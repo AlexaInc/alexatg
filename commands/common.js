@@ -204,7 +204,14 @@ module.exports = function (bot, deps) {
                 const doc = m.media.document;
                 const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
                 const needsThumb = isSticker && doc.mimeType !== 'image/webp';
-                mediaBuffer = await client.downloadMedia(m.media, needsThumb ? { thumbSize: 'v' } : undefined);
+
+                if (needsThumb) {
+                  // Try to get 'v' size thumb, fallback to 'm'
+                  mediaBuffer = await client.downloadMedia(m.media, { thumbSize: 'v' }).catch(() => null);
+                  if (!mediaBuffer) mediaBuffer = await client.downloadMedia(m.media, { thumbSize: 'm' }).catch(() => null);
+                } else {
+                  mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
+                }
               } catch (e) { }
             }
 
@@ -279,7 +286,10 @@ module.exports = function (bot, deps) {
         let mediaBuffer = null;
         if (targetMsg.sticker) {
           try {
-            const stickerLink = await bot.getFileLink(targetMsg.sticker.file_id);
+            // Animated or Video stickers can't be rendered directly, so we use the static thumbnail
+            const isAnimated = targetMsg.sticker.is_animated || targetMsg.sticker.is_video;
+            const fileId = (isAnimated && targetMsg.sticker.thumbnail) ? targetMsg.sticker.thumbnail.file_id : targetMsg.sticker.file_id;
+            const stickerLink = await bot.getFileLink(fileId);
             mediaBuffer = await downloadImage(stickerLink);
           } catch (e) { }
         }

@@ -233,7 +233,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-serif; background: transparent; -webkit-font-smoothing: antialiased; }
 #wrap { display: inline-flex; flex-direction: column; gap: 0; padding: ${12 * SCALE}px; }
-.bubble-container { display: flex; align-items: flex-end; position: relative; max-width: ${160 * SCALE}px; }
+.bubble-container { display: flex; align-items: flex-end; position: relative; max-width: ${160 * SCALE}px; margin-bottom: ${6 * SCALE}px; gap: ${6 * SCALE}px; }
 .bubble-container.sender-break { margin-top: ${10 * SCALE}px; }
 .bubble-pp { width: ${PP_SIZE}px; height: ${PP_SIZE}px; border-radius: 50%; flex-shrink: 0; margin-right: ${10 * SCALE}px; background-size: cover; background-position: center; border: ${1 * SCALE}px solid rgba(255,255,255,0.05); }
 .bubble-pp.hidden { opacity: 0; pointer-events: none; }
@@ -243,7 +243,6 @@ body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-
 .bubble-container.in.middle-in-group .bubble { border-top-left-radius: var(--rs); border-bottom-left-radius: var(--rs); }
 .bubble-container.in.last-in-group .bubble { border-top-left-radius: var(--rs); }
 .bubble::before { content: ""; display: none; position: absolute; }
-.bubble-container { max-width: 100%; display: flex; align-items: flex-end; position: relative; margin-bottom: ${6 * SCALE}px; gap: ${6 * SCALE}px; }
 .bubble-container.in.last-in-group .bubble::before, .bubble-container.in.single-message .bubble::before { display: block; bottom: 0; left: -${8 * SCALE}px; width: 0; height: 0; border-style: solid; border-width: 0 0 ${10 * SCALE}px ${8 * SCALE}px; border-color: transparent transparent ${MSG_IN} transparent; }
 .bubble-container.is-sticker { max-content: ${200 * SCALE}px; align-items: flex-end; margin-bottom: ${18 * SCALE}px; gap: 0; }
 .bubble-container.is-sticker .bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }

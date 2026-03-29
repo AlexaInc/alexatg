@@ -229,7 +229,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 
     const MSG_IN = '#111112';
     const css = `
-:root { --r: ${18 * SCALE}px; --rs: ${5 * SCALE}px; }
+:root { --r: ${20 * SCALE}px; --rs: ${5 * SCALE}px; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-serif; background: transparent; -webkit-font-smoothing: antialiased; }
 #wrap { display: inline-flex; flex-direction: column; gap: 0; padding: ${30 * SCALE}px; background: transparent; }
@@ -237,11 +237,11 @@ body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-
 .bubble-container.sender-break { margin-top: ${10 * SCALE}px; }
 .bubble-pp { width: ${PP_SIZE}px; height: ${PP_SIZE}px; border-radius: 50%; flex-shrink: 0; margin-right: ${10 * SCALE}px; background-size: cover; background-position: center; border: ${1 * SCALE}px solid rgba(255,255,255,0.05); }
 .bubble-pp.hidden { opacity: 0; pointer-events: none; }
-.bubble { position: relative; padding: ${11 * SCALE}px ${24 * SCALE}px ${11 * SCALE}px ${16 * SCALE}px; border-radius: var(--r); background: ${MSG_IN}; color: #fff; font-size: ${MSG_FS}px; line-height: 1.48; width: fit-content; max-width: 100%; overflow-wrap: break-word; }
-.bubble-container.in.last-in-group .bubble, .bubble-container.in.single-message .bubble { border-bottom-left-radius: 0; }
-.bubble-container.in.first-in-group .bubble { border-bottom-left-radius: var(--rs); }
+.bubble { position: relative; padding: ${11 * SCALE}px ${24 * SCALE}px ${11 * SCALE}px ${16 * SCALE}px; background: ${MSG_IN}; color: #fff; font-size: ${MSG_FS}px; line-height: 1.48; width: fit-content; max-width: 100%; overflow-wrap: break-word; border-radius: var(--r); }
+.bubble-container.in.single-message .bubble { border-bottom-left-radius: 0 !important; }
+.bubble-container.in.first-in-group .bubble { border-bottom-left-radius: var(--rs); border-top-left-radius: var(--r); }
 .bubble-container.in.middle-in-group .bubble { border-top-left-radius: var(--rs); border-bottom-left-radius: var(--rs); }
-.bubble-container.in.last-in-group .bubble { border-top-left-radius: var(--rs); }
+.bubble-container.in.last-in-group .bubble { border-top-left-radius: var(--rs); border-bottom-left-radius: 0 !important; }
 .bubble::before { content: ""; display: none; position: absolute; }
 .bubble-container.in.last-in-group .bubble::before, .bubble-container.in.single-message .bubble::before { display: block; bottom: 0; left: -${8 * SCALE}px; width: 0; height: 0; border-style: solid; border-width: 0 0 ${10 * SCALE}px ${8 * SCALE}px; border-color: transparent transparent ${MSG_IN} transparent; }
 .bubble-container.is-sticker { max-width: ${200 * SCALE}px; align-items: flex-end; margin-bottom: ${18 * SCALE}px; gap: 0; }

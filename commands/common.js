@@ -201,12 +201,15 @@ module.exports = function (bot, deps) {
             let mediaBuffer = null;
             if (m.media) {
               try {
-                // If it's the target message, the Bot API object is most reliable for thumbs
-                if (m.id === targetMsgId && targetMsg.sticker) {
+                // If it's the target message, try Bot API (very reliable)
+                if (m.id.toString() === targetMsgId.toString() && targetMsg.sticker) {
                   const thumb = targetMsg.sticker.thumbnail || targetMsg.sticker.thumb;
-                  const fileId = thumb ? thumb.file_id : targetMsg.sticker.file_id;
-                  const link = await bot.getFileLink(fileId).catch(() => null);
-                  if (link) mediaBuffer = await downloadImage(link);
+                  if (thumb) {
+                    const link = await bot.getFileLink(thumb.file_id).catch(() => null);
+                    if (link) {
+                        mediaBuffer = await downloadImage(link);
+                    }
+                  }
                 }
 
                 if (!mediaBuffer && m.media.document) {
@@ -224,15 +227,13 @@ module.exports = function (bot, deps) {
                       }
                     }
                   } else {
-                    // Regular photo or static sticker
                     mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                   }
                 } else if (!mediaBuffer) {
-                  // Fallback for whatever else (photos etc)
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
               } catch (e) {
-                console.error("Media download error in loop:", e);
+                console.error("Media processing error:", e);
               }
             }
 

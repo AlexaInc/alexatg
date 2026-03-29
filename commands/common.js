@@ -309,10 +309,9 @@ module.exports = function (bot, deps) {
               isAbsoluteLast: false
             });
           }
-        }
-        if (messagesToProcess.length > 0) {
-          messagesToProcess[messagesToProcess.length - 1].isAbsoluteLast = true;
-        }
+          if (messagesToProcess.length > 0) {
+            messagesToProcess[messagesToProcess.length - 1].isAbsoluteLast = true;
+          }
         } catch (e) {
           console.error("Userbot quote error:", e);
         } finally {

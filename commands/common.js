@@ -205,18 +205,17 @@ module.exports = function (bot, deps) {
                 const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
 
                 if (doc && isSticker && doc.mimeType !== 'image/webp') {
-                  // Animated/Video stickers: Use static thumbnail via GramJS size code
-                  let bestSize = null;
+                  // Use GramJS thumbnail codes (type: 'v', 'm' etc)
+                  let bestType = null;
                   if (doc.thumbs && doc.thumbs.length > 0) {
-                    const priority = ['y', 'x', 'w', 'v', 'm', 's'];
+                    const priority = ['v', 'm', 's', 'y', 'x', 'w'];
                     for (const p of priority) {
-                      if (doc.thumbs.some(t => t.type === p)) { bestSize = p; break; }
+                      if (doc.thumbs.some(t => t.type === p)) { bestType = p; break; }
                     }
-                    if (!bestSize) bestSize = doc.thumbs[doc.thumbs.length - 1].type || doc.thumbs[doc.thumbs.length - 1].size;
+                    if (!bestType) bestType = doc.thumbs[doc.thumbs.length - 1].type;
                   }
-                  mediaBuffer = await client.downloadMedia(m.media, { thumbSize: bestSize }).catch(() => null);
+                  mediaBuffer = await client.downloadMedia(m.media, { thumbSize: bestType }).catch(() => null);
                 } else {
-                  // Static sticker or Regular photo
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
               } catch (e) { }
@@ -293,11 +292,19 @@ module.exports = function (bot, deps) {
         let mediaBuffer = null;
         if (targetMsg.sticker) {
           try {
-            // Animated or Video stickers can't be rendered directly, so we use the static thumbnail
-            const isAnimated = targetMsg.sticker.is_animated || targetMsg.sticker.is_video;
-            const fileId = (isAnimated && targetMsg.sticker.thumbnail) ? targetMsg.sticker.thumbnail.file_id : targetMsg.sticker.file_id;
-            const stickerLink = await bot.getFileLink(fileId);
-            mediaBuffer = await downloadImage(stickerLink);
+            // USER'S RECOMMENDED BOT API STRATEGY
+            const thumbObj = targetMsg.sticker.thumbnail || targetMsg.sticker.thumb;
+            if (thumbObj) {
+              const fileId = thumbObj.file_id;
+              const sFile = await bot.getFile(fileId);
+              const sUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${sFile.file_path}`;
+              mediaBuffer = await downloadImage(sUrl);
+            } else if (!targetMsg.sticker.is_animated && !targetMsg.sticker.is_video) {
+              // Static sticker: get original
+              const sFile = await bot.getFile(targetMsg.sticker.file_id);
+              const sUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${sFile.file_path}`;
+              mediaBuffer = await downloadImage(sUrl);
+            }
           } catch (e) { }
         }
 

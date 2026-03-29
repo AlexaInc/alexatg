@@ -181,9 +181,8 @@ module.exports = function (bot, deps) {
           const startId = targetMsg.message_id;
           const msgIds = [];
           for (let i = 0; i < count; i++) {
-            msgIds.push(startId - i);
+            msgIds.push(startId + i);
           }
-          msgIds.reverse(); // Now [oldest, ..., targetMsg]
 
           const fetched = await client.getMessages(chatEntity, { ids: msgIds });
 

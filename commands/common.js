@@ -278,9 +278,9 @@ module.exports = function (bot, deps) {
               }
             }
 
-            // Reply info (only first message in chain)
+            // Reply info (any message in chain can now show its reply context if /q r is used)
             let rUser = null, rText = null, rColor = null;
-            if (i === 0 && withReply && m.replyTo) {
+            if (withReply && m.replyTo) {
               try {
                 const gfMsgs = await client.getMessages(chatEntity, { ids: [m.replyTo.replyToMsgId] });
                 const gf = gfMsgs[0];
@@ -305,7 +305,8 @@ module.exports = function (bot, deps) {
               replyMessage: rText,
               replysendercolor: rColor,
               entities, mediaBuffer,
-              id: sender ? sender.id.toString() : '1'
+              id: sender ? sender.id.toString() : '1',
+              isAbsoluteLast: i === fetched.length - 1
             });
           }
         } catch (e) {
@@ -358,7 +359,8 @@ module.exports = function (bot, deps) {
           replysendercolor: rColor,
           entities: targetMsg.entities || targetMsg.caption_entities || [],
           mediaBuffer,
-          id: from.id.toString()
+          id: from.id.toString(),
+          isAbsoluteLast: true
         });
       }
 

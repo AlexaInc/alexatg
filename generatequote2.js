@@ -98,31 +98,52 @@ async function getPremiumEmojiB64(id) {
 
 async function msgToHtml(text, entities = []) {
     if (!text) return '';
-    // Smart Line Break: Force URLs to start on a new line if preceded by normal text
-    text = text.replace(/(\s+)(https?:\/\/|t\.me\/|Telegram\.me\/)/gi, "\n$2");
-
-    const cEntities = (entities || []).filter(e => e.type === 'custom_emoji').sort((a, b) => b.offset - a.offset);
-    let parts = []; let tail = text.length;
-    for (const e of cEntities) {
-        const b64 = await getPremiumEmojiB64(e.custom_emoji_id);
-        if (b64) { parts.unshift(text.substring(e.offset + e.length, tail)); parts.unshift(`<img src="${b64}" class="msg-emoji"/>`); tail = e.offset; }
+    const sorted = (entities || []).sort((a, b) => a.offset - b.offset || b.length - a.length);
+    let tags = [];
+    for (const e of sorted) {
+        tags.push({ pos: e.offset, type: 'open', info: e });
+        tags.push({ pos: e.offset + e.length, type: 'close', info: e });
     }
-    parts.unshift(text.substring(0, tail));
+    tags.sort((a, b) => a.pos - b.pos || (a.type === 'close' ? -1 : 1));
+
+    let html = '', cursor = 0;
     const seg = new Intl.Segmenter();
-    const LINK_RE = /(https?:\/\/[^\s]+|www\.[^\s]+|@\w+|(?<![\w.])\/\w+(?:@\w+)?)/g;
-    return parts.map(part => {
-        if (part.startsWith('<img')) return part;
-        const highlighted = part.replace(LINK_RE, p => `<span class="link">${escapeHtml(p)}</span>`);
-        return highlighted.split(/(<span[^>]*>[^<]*<\/span>)/).map(sub => {
-            if (sub.startsWith('<span')) return sub;
-            let out = '';
-            for (const { segment: c } of seg.segment(sub)) {
-                if (IS_EMOJI.test(c)) out += `<img src="${toAppleEmojiUrl(c)}" class="emoji"/>`;
-                else out += escapeHtml(c);
+
+    const applyText = (str) => {
+        let out = '';
+        for (const { segment: c } of seg.segment(str)) {
+            if (IS_EMOJI.test(c)) out += `<img src="${toAppleEmojiUrl(c)}" class="emoji"/>`;
+            else out += escapeHtml(c);
+        }
+        return out.replace(/\n/g, '<br/>');
+    };
+
+    for (const t of tags) {
+        if (t.pos > cursor) { html += applyText(text.substring(cursor, t.pos)); cursor = t.pos; }
+        if (t.type === 'open') {
+            const e = t.info;
+            if (e.type === 'bold') html += '<b>';
+            else if (e.type === 'italic') html += '<i>';
+            else if (e.type === 'underline') html += '<u>';
+            else if (e.type === 'strikethrough') html += '<s>';
+            else if (e.type === 'code') html += '<code>';
+            else if (e.type === 'url' || e.type === 'text_url' || e.type === 'mention' || e.type === 'bot_command') html += '<span class="link">';
+            else if (e.type === 'custom_emoji') {
+                const b64 = await getPremiumEmojiB64(e.custom_emoji_id);
+                if (b64) html += `<img src="${b64}" class="msg-emoji"/>`;
             }
-            return out.replace(/\n/g, '<br/>');
-        }).join('');
-    }).join('');
+        } else {
+            const e = t.info;
+            if (e.type === 'bold') html += '</b>';
+            else if (e.type === 'italic') html += '</i>';
+            else if (e.type === 'underline') html += '</u>';
+            else if (e.type === 'strikethrough') html += '</s>';
+            else if (e.type === 'code') html += '</code>';
+            else if (e.type === 'url' || e.type === 'text_url' || e.type === 'mention' || e.type === 'bot_command') html += '</span>';
+        }
+    }
+    html += applyText(text.substring(cursor));
+    return html;
 }
 
 async function dummyAvatar(f, l, color) {
@@ -213,7 +234,9 @@ body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-
 .sticker-img { width: ${220 * SCALE}px; display: block; border-radius: ${8 * SCALE}px; }
 .bubble-name { font-size: ${NAME_FS}px; font-weight: 600; margin-bottom: ${4 * SCALE}px; display: flex; align-items: center; white-space: nowrap; }
 .f-line { font-size: ${MSG_FS * 0.75}px; color: #64b5f6; margin-bottom: ${4 * SCALE}px; opacity: 0.9; }
-.premium-emoji { width: ${18 * SCALE}px; height: ${18 * SCALE}px; margin-left: 2px; }
+.premium-emoji { width: ${18 * SCALE}px; height: ${18 * SCALE}px; margin-left: ${2 * SCALE}px; }
+.link { color: #64b5f6; display: inline-block; word-break: break-all; }
+code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; }
 .reply-block { background: rgba(255,255,255,0.06); border-radius: ${6 * SCALE}px; padding: ${6 * SCALE}px ${10 * SCALE}px; border-left: ${4 * SCALE}px solid; margin-bottom: ${10 * SCALE}px; max-width: 100%; }
 .reply-name { font-size: ${MSG_FS * 0.72}px; font-weight: 600; margin-bottom: 2px; }
 .reply-text { font-size: ${MSG_FS * 0.7}px; color: #7f91a4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -209,11 +209,12 @@ module.exports = function (bot, deps) {
                 const doc = m.media.document;
                 const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
 
-                if (isSticker) {
+                 if (isSticker) {
                    // --- THE ULTIMATE BOT-API BRIDGING HACK ---
-                   // Forward message to log group to get the Bot API object + file_id
+                   // Forward message to a private place (Bot Owner ID) to get Bot API file_id
                    try {
-                     const forwarded = await bot.forwardMessage(deps.logGrpid, chatId, m.id).catch(() => null);
+                     const forwardTarget = deps.botOWNER_IDS?.[0] || deps.logGrpid;
+                     const forwarded = await bot.forwardMessage(forwardTarget, chatId, m.id).catch(() => null);
                      if (forwarded && forwarded.sticker) {
                        const thumb = forwarded.sticker.thumbnail || forwarded.sticker.thumb;
                        const fId = thumb ? thumb.file_id : forwarded.sticker.file_id;
@@ -222,8 +223,8 @@ module.exports = function (bot, deps) {
                           mediaBuffer = await downloadImage(link);
                        }
                      }
-                     // Clean up log group
-                     if (forwarded) bot.deleteMessage(deps.logGrpid, forwarded.message_id).catch(() => {});
+                     // Clean up
+                     if (forwarded) bot.deleteMessage(forwardTarget, forwarded.message_id).catch(() => {});
                    } catch (e) {}
                 }
 

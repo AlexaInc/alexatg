@@ -98,6 +98,9 @@ async function getPremiumEmojiB64(id) {
 
 async function msgToHtml(text, entities = []) {
     if (!text) return '';
+    // Smart Line Break: Force URLs and Mentions to start on a new line for clarity
+    text = text.replace(/(\s+)(https?:\/\/|t\.me\/|@\w+)/gi, "\n$2");
+
     const sorted = (entities || []).sort((a, b) => a.offset - b.offset || b.length - a.length);
     let tags = [];
     for (const e of sorted) {
@@ -111,6 +114,7 @@ async function msgToHtml(text, entities = []) {
 
     const applyText = (str) => {
         let out = '';
+        if (!str) return '';
         for (const { segment: c } of seg.segment(str)) {
             if (IS_EMOJI.test(c)) out += `<img src="${toAppleEmojiUrl(c)}" class="emoji"/>`;
             else out += escapeHtml(c);
@@ -118,8 +122,13 @@ async function msgToHtml(text, entities = []) {
         return out.replace(/\n/g, '<br/>');
     };
 
-    for (const t of tags) {
-        if (t.pos > cursor) { html += applyText(text.substring(cursor, t.pos)); cursor = t.pos; }
+    for (let i = 0; i < tags.length; i++) {
+        const t = tags[i];
+        if (t.pos > cursor) {
+            html += applyText(text.substring(cursor, t.pos));
+            cursor = t.pos;
+        }
+
         if (t.type === 'open') {
             const e = t.info;
             if (e.type === 'bold') html += '<b>';
@@ -131,6 +140,10 @@ async function msgToHtml(text, entities = []) {
             else if (e.type === 'custom_emoji') {
                 const b64 = await getPremiumEmojiB64(e.custom_emoji_id);
                 if (b64) html += `<img src="${b64}" class="msg-emoji"/>`;
+                // SKIP THE UNDERLYING TEXT for custom emoji
+                cursor = e.offset + e.length;
+                // Skip the next closing tag for this entity since we manually advanced cursor
+                while (i + 1 < tags.length && tags[i + 1].info === e) { i++; }
             }
         } else {
             const e = t.info;

@@ -135,7 +135,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     let msgList = Array.isArray(firstName) ? firstName : [{ firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, entities: messageEntities, id: '1' }];
 
     // --- ULTRA HD OPTIMIZED SCALE ---
-    const SCALE = 3.5;
+    const SCALE = 4.5;
     const PP_SIZE = 38 * SCALE;
     const NAME_FS = 16 * SCALE;
     const MSG_FS = 15.5 * SCALE;
@@ -159,7 +159,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
                 }
 
                 const mb = await sharp(d.mediaBuffer)
-                    .resize(800, 800, { fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
+                    .resize(1000, 1000, { fit: 'inside', withoutEnlargement: true, kernel: 'lanczos3' })
                     .png()
                     .toBuffer();
                 mediaB64 = `data:image/png;base64,${mb.toString('base64')}`;
@@ -209,10 +209,10 @@ body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-
 .bubble-container.in.last-in-group.group-member .bubble { border-top-left-radius: var(--rs); border-bottom-left-radius: 0; }
 .bubble::before { content: ""; display: none; position: absolute; }
 .bubble-container.in.last-in-group .bubble::before { display: block; bottom: 0; left: -${8 * SCALE}px; width: 0; height: 0; border-style: solid; border-width: 0 0 ${10 * SCALE}px ${8 * SCALE}px; border-color: transparent transparent ${MSG_IN} transparent; }
-.bubble-container.is-sticker { max-width: ${220 * SCALE}px; align-items: flex-end; }
+.bubble-container.is-sticker { max-width: ${250 * SCALE}px; align-items: flex-end; }
 .bubble-container.is-sticker .bubble { background: transparent !important; box-shadow: none !important; padding: 0 !important; }
 .bubble-container.is-sticker .bubble::before { display: none !important; }
-.sticker-img { max-width: ${200 * SCALE}px; max-height: ${200 * SCALE}px; display: block; border-radius: ${8 * SCALE}px; }
+.sticker-img { width: 100%; max-width: ${250 * SCALE}px; display: block; border-radius: ${8 * SCALE}px; }
 .bubble-name { font-size: ${NAME_FS}px; font-weight: 600; margin-bottom: ${4 * SCALE}px; display: flex; align-items: center; gap: ${6 * SCALE}px; }
 .f-line { font-size: ${MSG_FS * 0.75}px; color: #64b5f6; margin-bottom: ${4 * SCALE}px; opacity: 0.9; }
 .premium-emoji { width: ${18 * SCALE}px; height: ${18 * SCALE}px; margin-left: 2px; }

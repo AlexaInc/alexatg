@@ -203,18 +203,20 @@ module.exports = function (bot, deps) {
               try {
                 const doc = m.media.document;
                 const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
-
+                
                 if (doc && isSticker && doc.mimeType !== 'image/webp') {
-                  // Use GramJS thumbnail codes (type: 'v', 'm' etc)
-                  let bestType = null;
-                  if (doc.thumbs && doc.thumbs.length > 0) {
-                    const priority = ['v', 'm', 's', 'y', 'x', 'w'];
-                    for (const p of priority) {
-                      if (doc.thumbs.some(t => t.type === p)) { bestType = p; break; }
+                  // Attempt multiple thumbnail sizes until one works
+                  const priority = ['y', 'x', 'w', 'v', 'm'];
+                  for (const p of priority) {
+                    if (doc.thumbs && doc.thumbs.some(t => t.type === p)) {
+                      mediaBuffer = await client.downloadMedia(m.media, { thumbSize: p }).catch(() => null);
+                      if (mediaBuffer && mediaBuffer.length > 100) break; 
                     }
-                    if (!bestType) bestType = doc.thumbs[doc.thumbs.length - 1].type;
                   }
-                  mediaBuffer = await client.downloadMedia(m.media, { thumbSize: bestType }).catch(() => null);
+                  // Last ditch: any thumb
+                  if (!mediaBuffer && doc.thumbs && doc.thumbs.length > 0) {
+                     mediaBuffer = await client.downloadMedia(m.media, { thumbSize: doc.thumbs[0].type }).catch(() => null);
+                  }
                 } else {
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
@@ -292,15 +294,10 @@ module.exports = function (bot, deps) {
         let mediaBuffer = null;
         if (targetMsg.sticker) {
           try {
-            // USER-SUGGESTED BOT API STRATEGY (V2)
-            const thumbObj = targetMsg.sticker.thumbnail || targetMsg.sticker.thumb;
-            if (thumbObj) {
-              const link = await bot.getFileLink(thumbObj.file_id);
-              mediaBuffer = await downloadImage(link);
-            } else if (!targetMsg.sticker.is_animated && !targetMsg.sticker.is_video) {
-              const link = await bot.getFileLink(targetMsg.sticker.file_id);
-              mediaBuffer = await downloadImage(link);
-            }
+            const isAnimated = targetMsg.sticker.is_animated || targetMsg.sticker.is_video;
+            const fileId = (isAnimated && targetMsg.sticker.thumbnail) ? targetMsg.sticker.thumbnail.file_id : targetMsg.sticker.file_id;
+            const link = await bot.getFileLink(fileId);
+            mediaBuffer = await downloadImage(link);
           } catch (e) { }
         }
 

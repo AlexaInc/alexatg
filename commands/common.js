@@ -288,7 +288,7 @@ module.exports = function (bot, deps) {
                   const s = gf.sender || await client.getEntity(gf.fromId).catch(() => null);
                   rUser = s ? (s.title || `${s.firstName || ''} ${s.lastName || ''}`.trim()) : 'User';
                   rText = gf.message || gf.caption || (gf.media ? "Media" : null);
-                  rColor = s?.color?.colorId || 0;
+                  rColor = s?.accentColorId ?? s?.color?.colorId ?? 0;
                 }
               } catch (e) { }
             }

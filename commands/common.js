@@ -185,22 +185,19 @@ module.exports = function (bot, deps) {
 
             for (let i = 0; i < fetched.length; i++) {
               const m = fetched[i];
-              if (!m || (!m.message && !m.caption)) continue;
+              // ALLOW stickers and media messages even if they have no text
+              if (!m || (!m.message && !m.caption && !m.sticker && !m.media)) continue;
 
               const sender = m.sender;
               const senderId = m.senderId?.toString();
               const photoUrl = senderId ? await getProfilePhoto(bot, senderId) : null;
               const photo = photoUrl ? await downloadImage(photoUrl) : null;
 
-              // Download sticker if present via userbot client
               let mediaBuffer = null;
-              if (m.sticker) {
-                try {
-                  mediaBuffer = await client.downloadMedia(m.media);
-                } catch (e) { console.warn("Sticker download failed:", e); }
+              if (m.sticker || m.media) {
+                try { mediaBuffer = await client.downloadMedia(m.media); } catch (e) { }
               }
 
-              // Convert GramJS entities to plain objects
               const entities = (m.entities || []).map(e => {
                 let type = 'unknown';
                 if (e.className === 'MessageEntityBold') type = 'bold';
@@ -213,41 +210,29 @@ module.exports = function (bot, deps) {
                 return { type, offset: e.offset, length: e.length, custom_emoji_id: e.documentId?.toString() };
               });
 
-              let rUser = null, rText = null, rColor = null;
-              if (i === 0 && withReply && m.replyTo) {
-                const gfMsgs = await client.getMessages(chatEntity, { ids: [m.replyTo.replyToMsgId] });
-                const gf = gfMsgs[0];
-                if (gf) {
-                  const s = gf.sender;
-                  rUser = `${s?.firstName || ''} ${s?.lastName || ''}`.trim() || 'User';
-                  rText = gf.message || gf.caption || (gf.sticker ? "Sticker" : "Media");
-                  rColor = s?.color?.colorId || (Math.floor(Math.random() * 7));
-                }
+              // Extract Forwarded Sender Name (if it's a forward)
+              let fName = null;
+              if (m.fwdFrom) {
+                if (m.fwdFrom.fromId?.className === 'PeerChannel' || m.fwdFrom.fromId?.className === 'PeerChat') { fName = "Channel/Group"; }
+                else if (m.fwdFrom.fromName) { fName = m.fwdFrom.fromName; }
+                else if (m.fwdFrom.fromId?.className === 'PeerUser') { fName = "User"; }
               }
 
               messagesToProcess.push({
                 firstName: sender?.firstName || 'User',
                 lastName: sender?.lastName || '',
                 customemojiid: sender?.emojiStatus?.documentId?.toString(),
-                message: m.message || m.caption || ' ',
+                message: m.message || m.caption || (m.sticker ? "" : " "),
                 nameColorId: sender?.color?.colorId || 0,
                 inputImageBuffer: photo,
-                replySender: rUser,
-                replyMessage: rText,
-                replysendercolor: rColor,
-                entities,
-                mediaBuffer
+                forwardName: fName,
+                entities, mediaBuffer
               });
             }
-          } catch (e) {
-            console.error("Multi-quote fetch error:", e);
-          } finally {
-            await client.disconnect().catch(() => { });
-          }
+          } catch (e) { } finally { await client.disconnect().catch(() => { }); }
         }
       }
 
-      // If multi-fetch failed or count was 1, fallback to single message
       if (messagesToProcess.length === 0) {
         const from = targetMsg.from;
         const photoUrl = await getProfilePhoto(bot, from.id);
@@ -263,42 +248,23 @@ module.exports = function (bot, deps) {
           } catch (e) { }
         }
 
-        let rUser = null, rText = null, rColor = null;
-        if (withReply) {
-          const client = await getUserbotClient();
-          if (client) {
-            try {
-              const chatEntity = await getJoinedEntity(client, bot, chatId);
-              const msgs = await client.getMessages(chatEntity, { ids: [targetMsg.message_id] });
-              if (msgs[0]?.replyTo) {
-                const gfs = await client.getMessages(chatEntity, { ids: [msgs[0].replyTo.replyToMsgId] });
-                if (gfs[0]) {
-                  const s = gfs[0].sender;
-                  rUser = `${s?.firstName || ''} ${s?.lastName || ''}`.trim() || 'User';
-                  rText = gfs[0].message || gfs[0].caption || (gfs[0].sticker ? "Sticker" : "Media");
-                  rColor = s?.color?.colorId || 0;
-                }
-              }
-            } finally { await client.disconnect().catch(() => { }); }
-          }
-        } else if (targetMsg.reply_to_message) {
-          const rFrom = targetMsg.reply_to_message.from;
-          rUser = `${rFrom.first_name} ${rFrom.last_name || ''}`.trim();
-          rText = targetMsg.reply_to_message.text || targetMsg.reply_to_message.caption || (targetMsg.reply_to_message.sticker ? "Sticker" : null);
-          const rChat = await bot.getChat(rFrom.id).catch(() => ({}));
-          rColor = rChat.accent_color_id || 0;
+        let fName = null;
+        if (targetMsg.forward_from) {
+          fName = `${targetMsg.forward_from.first_name} ${targetMsg.forward_from.last_name || ''}`.trim();
+        } else if (targetMsg.forward_from_chat) {
+          fName = targetMsg.forward_from_chat.title;
+        } else if (targetMsg.forward_sender_name) {
+          fName = targetMsg.forward_sender_name;
         }
 
         messagesToProcess.push({
           firstName: from.first_name,
           lastName: from.last_name,
           customemojiid: chat.emoji_status_custom_emoji_id,
-          message: targetMsg.text || targetMsg.caption || ' ',
+          message: targetMsg.text || targetMsg.caption || (targetMsg.sticker ? "" : " "),
           nameColorId: chat.accent_color_id || 0,
           inputImageBuffer: photo,
-          replySender: rUser,
-          replyMessage: rText,
-          replysendercolor: rColor,
+          forwardName: fName,
           entities: targetMsg.entities || targetMsg.caption_entities || [],
           mediaBuffer
         });

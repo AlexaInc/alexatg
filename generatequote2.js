@@ -97,9 +97,8 @@ async function getPremiumEmojiB64(id) {
 }
 
 async function msgToHtml(text, entities = []) {
-    if (!text) return '';
-    // Smart Line Break: Force URLs and Mentions to start on a new line for clarity
-    text = text.replace(/(\s+)(https?:\/\/|t\.me\/|@\w+)/gi, "\n$2");
+    // Smart Line Break: Force URLs and Mentions to start on a new line (even after emojis)
+    text = text.replace(/([^\n])(https?:\/\/|t\.me\/|@\w+)/gi, "$1\n$2");
 
     const sorted = (entities || []).sort((a, b) => a.offset - b.offset || b.length - a.length);
     let tags = [];

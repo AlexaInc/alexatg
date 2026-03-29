@@ -252,14 +252,12 @@ body { font-family: 'Inter','Noto Sans','Noto Sans SC','Noto Sans Symbols',sans-
 .bubble-name { font-size: ${NAME_FS}px; font-weight: 600; margin-bottom: ${4 * SCALE}px; display: flex; align-items: center; white-space: nowrap; }
 .f-line { font-size: ${MSG_FS * 0.75}px; color: #64b5f6; margin-bottom: ${4 * SCALE}px; opacity: 0.9; }
 .premium-emoji { width: ${18 * SCALE}px; height: ${18 * SCALE}px; margin-left: ${2 * SCALE}px; }
-.link { color: #64b5f6; display: inline-block; word-break: break-all; }
-code { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; }
-.reply-block { background: rgba(255,255,255,0.06); border-radius: ${6 * SCALE}px; padding: ${6 * SCALE}px ${10 * SCALE}px; border-left: ${4 * SCALE}px solid; margin-bottom: ${10 * SCALE}px; max-width: 100%; }
-.reply-name { font-size: ${MSG_FS * 0.72}px; font-weight: 600; margin-bottom: 2px; }
+.link { color: #64b5f6; display: inline-block; word-break: break-all; text-decoration: none; }
+.reply-block { background: rgba(255,255,255,0.06); border-radius: ${6 * SCALE}px; padding: ${6 * SCALE}px ${10 * SCALE}px; border-left: ${4 * SCALE}px solid; margin-bottom: ${10 * SCALE}px; max-width: ${200 * SCALE}px; overflow: hidden; }
+.reply-name { font-size: ${MSG_FS * 0.72}px; font-weight: 600; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .reply-text { font-size: ${MSG_FS * 0.7}px; color: #7f91a4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.emoji { height: 1.1em; width: 1.1em; vertical-align: middle; }
-.msg-emoji { height: 1.2em; width: 1.2em; vertical-align: middle; }
-.link { color: #64b5f6; text-decoration: none; }
+.emoji { height: 1.2em; width: 1.2em; vertical-align: middle; }
+.msg-emoji { height: 1.3em; width: 1.3em; vertical-align: middle; }
 `;
 
     const htmlBody = items.map(m => {

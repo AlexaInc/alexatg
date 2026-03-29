@@ -179,9 +179,13 @@ module.exports = function (bot, deps) {
         try {
           const chatEntity = await getJoinedEntity(client, bot, chatId);
           const startId = targetMsg.message_id;
-          const fetched = await client.getMessages(chatEntity, {
-            ids: Array.from({ length: count }, (_, i) => startId + i)
-          });
+          const msgIds = [];
+          for (let i = 0; i < count; i++) {
+            msgIds.push(startId - i);
+          }
+          msgIds.reverse(); // Now [oldest, ..., targetMsg]
+
+          const fetched = await client.getMessages(chatEntity, { ids: msgIds });
 
           for (let i = 0; i < fetched.length; i++) {
             const m = fetched[i];
@@ -202,7 +206,7 @@ module.exports = function (bot, deps) {
             if (m.media) {
               try {
                 // If it's the target message, try Bot API (very reliable)
-                if (m.id.toString() === targetMsgId.toString() && targetMsg.sticker) {
+                if (m.id.toString() === targetMsg.message_id.toString() && targetMsg.sticker) {
                   const thumb = targetMsg.sticker.thumbnail || targetMsg.sticker.thumb;
                   if (thumb) {
                     const link = await bot.getFileLink(thumb.file_id).catch(() => null);

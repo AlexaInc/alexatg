@@ -1046,7 +1046,9 @@ class GramJSBot extends EventEmitter {
                     'Accept': 'image/*',
                 }
             });
-            return await sendAsPhoto(Buffer.from(res.data), photo.split('/').pop() || 'photo.jpg');
+            let fileName = photo.split('/').pop() || 'photo.jpg';
+            if (!fileName.includes('.')) fileName += '.jpg';
+            return await sendAsPhoto(Buffer.from(res.data), fileName);
           } catch (e) {
             console.error('[GramJS Bot] URL Photo Error:', e.message);
             const result = await this._client.sendFile(entity, { 

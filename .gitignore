@@ -1,0 +1,89 @@
+# Ignore node modules
+node_modules/
+
+# Ignore environment variables
+.env
+
+# Optional ignore logs, system files, etc.
+*.log
+.DS_Store
+
+# Ignore specific JSON files
+ids.json
+groups.json
+users.json
+session.txt
+
+# Ignore folders
+shipping/
+filters/
+aaa/
+emoji_status/
+.gemini/
+temp_upload/
+codebackup/
+mtgraf/
+.git/
+
+# Ignore bot session files
+.bot_session_*
+.bot_session
+*.session
+
+# Ignore environment & config files
+.env
+.antigravityignore
+
+# Ignore testing or deployment scripts
+hf_fix.py
+hf_deploy_direct.py
+migrate_1137.js
+migrate.js
+fix_md.js
+clear_sessions.js
+
+# Ignore test scripts
+test*.js
+ultimate_api_test.js
+
+# Ignore backup and archive files
+*.bak*
+*.orig
+*.zip
+*.rar
+integration_result.webp
+
+# Ignore memory store files
+memory
+memory-shm
+memory-wal
+
+# Ignore specific files
+ex.js
+users.js
+fileid.js
+getgrps.js
+gramjs-bot-wrapper.js
+gramjs_bot2.js
+session.js
+sessionManager.js
+idsManager.js
+ubot.js
+web.js
+package.json.new
+implementation_plan.md
+
+# Ignore all user generated JSONs
+*.json
+!package.json
+!package-lock.json
+
+# Ignore temporary folders
+.sixth/
+temp/
+tempup/
+history/
+db/
+mtgraf/
+quoter/
+

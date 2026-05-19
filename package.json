@@ -1,0 +1,28 @@
+{
+  "name": "syssync-v1",
+  "version": "1.0.0",
+  "description": "System Synchronization API Service",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "big-integer": "^1.6.52",
+    "canvas": "^3.2.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "filtermatics": "^1.0.3",
+    "form-data": "^4.0.0",
+    "https-proxy-agent": "^9.0.0",
+    "moment-timezone": "^0.6.0",
+    "mongoose": "^8.23.0",
+    "node-fetch": "^2.7.0",
+    "node-telegram-bot-api": "^0.66.0",
+    "sharp": "^0.34.5",
+    "socks-proxy-agent": "^10.0.0",
+    "telegraf": "^4.16.3",
+    "telegram": "^2.26.22",
+    "ws": "^8.19.0"
+  }
+}

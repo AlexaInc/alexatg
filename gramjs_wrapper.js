@@ -1011,21 +1011,17 @@ class GramJSBot extends EventEmitter {
       
       // Helper to send as photo explicitly
       const sendAsPhoto = async (fileData, fileName = 'photo.jpg') => {
-        const uploadedFile = await this._client.uploadFile({
+        const result = await this._client.sendFile(entity, {
           file: fileData,
-          fileName: fileName
+          fileName: fileOptions.filename || fileName,
+          caption: sendOpts.caption,
+          parseMode: sendOpts.parseMode,
+          replyTo: sendOpts.replyTo,
+          buttons: sendOpts.buttons,
+          silent: sendOpts.silent,
+          forceDocument: false,
         });
-        const media = new Api.InputMediaUploadedPhoto({ file: uploadedFile });
-        const result = await this._client.invoke(new Api.messages.SendMedia({
-          peer: entity,
-          media: media,
-          message: sendOpts.caption,
-          entities: options.parse_mode ? await this._client._parseMessage(sendOpts.caption, this._getParseMode(options.parse_mode)) : undefined,
-          replyTo: sendOpts.replyTo ? new Api.InputReplyToMessage({ replyToMsgId: sendOpts.replyTo }) : undefined,
-          replyMarkup: sendOpts.buttons,
-          silent: sendOpts.silent
-        }));
-        return await this._convertMessage(result.updates.find(u => u instanceof Api.UpdateNewMessage || u instanceof Api.UpdateNewChannelMessage).message);
+        return await this._convertMessage(result);
       };
 
       if (Buffer.isBuffer(photo)) {
@@ -1044,13 +1040,14 @@ class GramJSBot extends EventEmitter {
           try {
             const axios = require('axios');
             const res = await axios.get(photo, { responseType: 'arraybuffer' });
-            return await sendAsPhoto(Buffer.from(res.data));
+            return await sendAsPhoto(Buffer.from(res.data), photo.split('/').pop());
           } catch (e) {
             console.error('[GramJS Bot] URL Photo Error:', e.message);
             const result = await this._client.sendFile(entity, { file: photo, ...sendOpts });
             return await this._convertMessage(result);
           }
-        } else if (photo.length < 2048 && fs.existsSync(photo)) {
+        }
+ else if (photo.length < 2048 && fs.existsSync(photo)) {
           return await sendAsPhoto(fs.readFileSync(photo));
         } else if (this._isBotApiFileId(photo)) {
           console.log(`[GramJS Bot] sendPhoto: Bot API file_id fallback to text.`);

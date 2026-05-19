@@ -1045,9 +1045,14 @@ class GramJSBot extends EventEmitter {
             const sharp = require('sharp');
             const res = await axios.get(photo, { 
                 responseType: 'arraybuffer',
+                timeout: 30000,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Accept': 'image/*',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': 'https://huggingface.co',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
                 }
             });
             const imgBuffer = await sharp(Buffer.from(res.data)).jpeg({ quality: 90 }).toBuffer();
@@ -1161,8 +1166,15 @@ class GramJSBot extends EventEmitter {
       if (resolvedFile === null) {
         return await this.sendMessage(chatId, '🎨 (sticker)', {});
       }
+      
+      // Wrap buffer in CustomFile to avoid GramJS "Could not create buffer from file" error
+      let fileToUpload = resolvedFile;
+      if (Buffer.isBuffer(resolvedFile)) {
+        fileToUpload = new CustomFile(filename, resolvedFile.length, '', resolvedFile);
+      }
+      
       const uploadedFile = await this._client.uploadFile({
-        file: resolvedFile,
+        file: fileToUpload,
         fileName: filename
       });
       const result = await this._client.sendFile(entity, {

@@ -1009,15 +1009,27 @@ class GramJSBot extends EventEmitter {
         forceDocument: false,
       };
       
-      if (Buffer.isBuffer(photo)) {
-        // Upload as photo explicitly using CustomFile so GramJS knows it's a photo
-        const file = new CustomFile('photo.jpg', photo.length, '', photo);
-        const result = await this._client.sendFile(entity, {
-          file: file,
-          ...sendOpts,
-          forceDocument: false,
+      // Helper to send as photo explicitly
+      const sendAsPhoto = async (fileData, fileName = 'photo.jpg') => {
+        const uploadedFile = await this._client.uploadFile({
+          file: fileData,
+          fileName: fileName
         });
-        return await this._convertMessage(result);
+        const media = new Api.InputMediaUploadedPhoto({ file: uploadedFile });
+        const result = await this._client.invoke(new Api.messages.SendMedia({
+          peer: entity,
+          media: media,
+          message: sendOpts.caption,
+          entities: options.parse_mode ? await this._client._parseMessage(sendOpts.caption, this._getParseMode(options.parse_mode)) : undefined,
+          replyTo: sendOpts.replyTo ? new Api.InputReplyToMessage({ replyToMsgId: sendOpts.replyTo }) : undefined,
+          replyMarkup: sendOpts.buttons,
+          silent: sendOpts.silent
+        }));
+        return await this._convertMessage(result.updates.find(u => u instanceof Api.UpdateNewMessage || u instanceof Api.UpdateNewChannelMessage).message);
+      };
+
+      if (Buffer.isBuffer(photo)) {
+        return await sendAsPhoto(photo);
       } else if (typeof photo === 'string') {
         if (photo.startsWith('gramjs:')) {
           const parts = photo.split(':');
@@ -1029,36 +1041,22 @@ class GramJSBot extends EventEmitter {
           const result = await this._client.sendFile(entity, { file: inputPhoto, ...sendOpts });
           return await this._convertMessage(result);
         } else if (photo.startsWith('http://') || photo.startsWith('https://')) {
-          // URL — Fetch it as a buffer to ensure it's sent as a photo, not a document
           try {
             const axios = require('axios');
             const res = await axios.get(photo, { responseType: 'arraybuffer' });
-            const buffer = Buffer.from(res.data);
-            const file = new CustomFile('photo.jpg', buffer.length, '', buffer);
-            const result = await this._client.sendFile(entity, { 
-                file: file, 
-                ...sendOpts,
-                forceDocument: false 
-            });
-            return await this._convertMessage(result);
+            return await sendAsPhoto(Buffer.from(res.data));
           } catch (e) {
-            console.error('[GramJS Bot] HTTP Photo Fetch Error, falling back to string URL:', e.message);
+            console.error('[GramJS Bot] URL Photo Error:', e.message);
             const result = await this._client.sendFile(entity, { file: photo, ...sendOpts });
             return await this._convertMessage(result);
           }
         } else if (photo.length < 2048 && fs.existsSync(photo)) {
-          // Local file path (check length same as MAX_PATH roughly, and avoid base64)
-          const result = await this._client.sendFile(entity, { file: photo, ...sendOpts });
-          return await this._convertMessage(result);
+          return await sendAsPhoto(fs.readFileSync(photo));
         } else if (this._isBotApiFileId(photo)) {
-          // Bot API file_id — can't use directly with GramJS
-          // Fallback: send caption as text message
-          console.log(`[GramJS Bot] sendPhoto: Bot API file_id detected, sending caption as text fallback.`);
+          console.log(`[GramJS Bot] sendPhoto: Bot API file_id fallback to text.`);
           return await this.sendMessage(chatId, options.caption || '📷 (photo)', options);
         } else {
-          // Try anyway
-          const result = await this._client.sendFile(entity, { file: photo, ...sendOpts });
-          return await this._convertMessage(result);
+          return await this._client.sendFile(entity, { file: photo, ...sendOpts }).then(r => this._convertMessage(r));
         }
       }
     } catch (e) {

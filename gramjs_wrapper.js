@@ -1011,9 +1011,12 @@ class GramJSBot extends EventEmitter {
       
       // Helper to send as photo explicitly
       const sendAsPhoto = async (fileData, fileName = 'photo.jpg') => {
-        const result = await this._client.sendFile(entity, {
+        const uploadedFile = await this._client.uploadFile({
           file: fileData,
-          fileName: fileOptions.filename || fileName,
+          fileName: fileName
+        });
+        const result = await this._client.sendFile(entity, {
+          file: uploadedFile,
           caption: sendOpts.caption,
           parseMode: sendOpts.parseMode,
           replyTo: sendOpts.replyTo,
@@ -1158,12 +1161,19 @@ class GramJSBot extends EventEmitter {
       if (resolvedFile === null) {
         return await this.sendMessage(chatId, '🎨 (sticker)', {});
       }
-      const result = await this._client.sendFile(entity, {
+      const uploadedFile = await this._client.uploadFile({
         file: resolvedFile,
+        fileName: filename
+      });
+      const result = await this._client.sendFile(entity, {
+        file: uploadedFile,
         replyTo: options.reply_to_message_id,
         buttons: options.reply_markup ? this._convertMarkup(options.reply_markup) : undefined,
         silent: options.disable_notification || false,
-        attributes: [new Api.DocumentAttributeFilename({ fileName: filename })],
+        attributes: [
+          new Api.DocumentAttributeFilename({ fileName: filename }),
+          new Api.DocumentAttributeSticker({ alt: '🎨', stickerset: new Api.InputStickerSetEmpty() })
+        ],
       });
       return await this._convertMessage(result);
     } catch (e) {

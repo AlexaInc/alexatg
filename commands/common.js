@@ -286,7 +286,7 @@ module.exports = function (bot, deps) {
             } else {
                 entities = (m.entities || []).map(e => {
                   let type = 'unknown';
-                  let custom_emoji_id, url, language;
+                  let custom_emoji_id, url, language, user;
                   if (e.className === 'MessageEntityBold') type = 'bold';
                   else if (e.className === 'MessageEntityItalic') type = 'italic';
                   else if (e.className === 'MessageEntityCode') type = 'code';
@@ -299,13 +299,18 @@ module.exports = function (bot, deps) {
                   else if (e.className === 'MessageEntityUrl') type = 'url';
                   else if (e.className === 'MessageEntityTextUrl') { type = 'text_link'; url = e.url; }
                   else if (e.className === 'MessageEntityMention') type = 'mention';
-                  else if (e.className === 'MessageEntityMentionName') type = 'text_mention';
+                  else if (e.className === 'MessageEntityMentionName') {
+                    type = 'text_mention';
+                    if (e.userId) {
+                      user = { id: e.userId.toString() };
+                    }
+                  }
                   else if (e.className === 'MessageEntityBotCommand') type = 'bot_command';
                   else if (e.className === 'MessageEntityHashtag') type = 'hashtag';
                   else if (e.className === 'MessageEntityCashtag') type = 'cashtag';
                   else if (e.className === 'MessageEntityPhone') type = 'phone_number';
                   else if (e.className === 'MessageEntityEmail') type = 'email';
-                  return { type, offset: e.offset, length: e.length, custom_emoji_id, url, language };
+                  return { type, offset: e.offset, length: e.length, custom_emoji_id, url, language, user };
                 }).filter(e => e.type !== 'unknown');
             }
 

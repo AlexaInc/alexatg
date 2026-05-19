@@ -1035,7 +1035,11 @@ class GramJSBot extends EventEmitter {
             const res = await axios.get(photo, { responseType: 'arraybuffer' });
             const buffer = Buffer.from(res.data);
             const file = new CustomFile('photo.jpg', buffer.length, '', buffer);
-            const result = await this._client.sendFile(entity, { file: file, ...sendOpts });
+            const result = await this._client.sendFile(entity, { 
+                file: file, 
+                ...sendOpts,
+                forceDocument: false 
+            });
             return await this._convertMessage(result);
           } catch (e) {
             console.error('[GramJS Bot] HTTP Photo Fetch Error, falling back to string URL:', e.message);

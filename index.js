@@ -423,7 +423,7 @@ bot.on('message', async (msg) => {
       try {
         const chat = await bot.getChat(ownerId);
         const name = chat.first_name || 'Owner';
-        ownerButtons.push([{ text: `👤 ${name}`, url: `https://t.me/user?id=${ownerId}` }]);
+        ownerButtons.push([{ text: `👤 ${name}`, url: `tg://user?id=${ownerId}` }]);
       } catch (e) {
         // ownerButtons.push([{ text: `👤 Owner ${ownerId}`, url: `https://t.me/user?id=${ownerId}` }]);
       }

@@ -1039,11 +1039,21 @@ class GramJSBot extends EventEmitter {
         } else if (photo.startsWith('http://') || photo.startsWith('https://')) {
           try {
             const axios = require('axios');
-            const res = await axios.get(photo, { responseType: 'arraybuffer' });
-            return await sendAsPhoto(Buffer.from(res.data), photo.split('/').pop());
+            const res = await axios.get(photo, { 
+                responseType: 'arraybuffer',
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'image/*',
+                }
+            });
+            return await sendAsPhoto(Buffer.from(res.data), photo.split('/').pop() || 'photo.jpg');
           } catch (e) {
             console.error('[GramJS Bot] URL Photo Error:', e.message);
-            const result = await this._client.sendFile(entity, { file: photo, ...sendOpts });
+            const result = await this._client.sendFile(entity, { 
+                file: photo, 
+                ...sendOpts,
+                forceDocument: false 
+            });
             return await this._convertMessage(result);
           }
         }

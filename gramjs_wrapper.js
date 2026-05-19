@@ -1011,12 +1011,14 @@ class GramJSBot extends EventEmitter {
       
       // Helper to send as photo explicitly
       const sendAsPhoto = async (fileData, fileName = 'photo.jpg') => {
-        const uploadedFile = await this._client.uploadFile({
-          file: fileData,
-          fileName: fileName
-        });
+        let fileToUpload = fileData;
+        if (Buffer.isBuffer(fileData)) {
+          // Use CustomFile to ensure GramJS handles the Buffer correctly and treats it as a file
+          fileToUpload = new CustomFile(fileName, fileData.length, '', fileData);
+        }
+
         const result = await this._client.sendFile(entity, {
-          file: uploadedFile,
+          file: fileToUpload,
           caption: sendOpts.caption,
           parseMode: sendOpts.parseMode,
           replyTo: sendOpts.replyTo,
@@ -1027,8 +1029,14 @@ class GramJSBot extends EventEmitter {
         return await this._convertMessage(result);
       };
 
+      // Truncate captions for media (Bot API limit is 1024)
+      if (sendOpts.caption && sendOpts.caption.length > 1024) {
+        sendOpts.caption = sendOpts.caption.substring(0, 1021) + '...';
+      }
+
       if (Buffer.isBuffer(photo)) {
-        return await sendAsPhoto(photo);
+        const finalName = fileOptions.filename || options.filename || 'photo.jpg';
+        return await sendAsPhoto(photo, finalName);
       } else if (typeof photo === 'string') {
         if (photo.startsWith('gramjs:')) {
           const parts = photo.split(':');
@@ -1049,18 +1057,22 @@ class GramJSBot extends EventEmitter {
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Referer': 'https://huggingface.co',
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
+                    'Referer': 'https://huggingface.co'
                 }
             });
-            const imgBuffer = await sharp(Buffer.from(res.data)).jpeg({ quality: 90 }).toBuffer();
+            
+            // Standardize ALL url images to JPEG to ensure they are sent as Photos, not Documents
+            const imgBuffer = await sharp(Buffer.from(res.data))
+                .jpeg({ quality: 90 })
+                .toBuffer();
+                
             return await sendAsPhoto(imgBuffer, 'photo.jpg');
           } catch (e) {
             console.error('[GramJS Bot] URL Photo Error:', e.message);
+            // Even in fallback, force fileName to .jpg to avoid Document view
             const result = await this._client.sendFile(entity, { 
                 file: photo, 
+                fileName: 'photo.jpg',
                 ...sendOpts,
                 forceDocument: false 
             });

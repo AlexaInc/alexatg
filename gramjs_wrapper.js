@@ -1039,6 +1039,7 @@ class GramJSBot extends EventEmitter {
         } else if (photo.startsWith('http://') || photo.startsWith('https://')) {
           try {
             const axios = require('axios');
+            const sharp = require('sharp');
             const res = await axios.get(photo, { 
                 responseType: 'arraybuffer',
                 headers: {
@@ -1046,9 +1047,8 @@ class GramJSBot extends EventEmitter {
                     'Accept': 'image/*',
                 }
             });
-            let fileName = photo.split('/').pop() || 'photo.jpg';
-            if (!fileName.includes('.')) fileName += '.jpg';
-            return await sendAsPhoto(Buffer.from(res.data), fileName);
+            const imgBuffer = await sharp(Buffer.from(res.data)).jpeg({ quality: 90 }).toBuffer();
+            return await sendAsPhoto(imgBuffer, 'photo.jpg');
           } catch (e) {
             console.error('[GramJS Bot] URL Photo Error:', e.message);
             const result = await this._client.sendFile(entity, { 

@@ -225,37 +225,26 @@ module.exports = function (bot, deps) {
             }
 
 
-            // 2. DOWNLOAD MEDIA (Stickers/Photos)
+            // 2. DOWNLOAD MEDIA (Stickers/Photos/Animations) — Direct GramJS download
             let mediaBuffer = null;
             if (m.media) {
               try {
-                // Determine if it's a sticker (via GramJS)
                 const doc = m.media.document;
-                const isSticker = doc && doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
+                const photo = m.media.photo;
+                const isSticker = doc && doc.attributes?.some(a => a.className === 'DocumentAttributeSticker');
+                const isAnimated = doc && doc.attributes?.some(a => a.className === 'DocumentAttributeAnimated');
+                const isVideo = doc && doc.attributes?.some(a => a.className === 'DocumentAttributeVideo');
 
-                if (isSticker) {
-                  // --- THE ULTIMATE BOT-API BRIDGING HACK ---
-                  // Forward message to the user who triggered the command (guaranteed to work)
-                  try {
-                    const forwardTarget = msg.from.id;
-                    const forwarded = await bot.forwardMessage(forwardTarget, chatId, m.id).catch(() => null);
-                    if (forwarded && forwarded.sticker) {
-                      const thumb = forwarded.sticker.thumbnail || forwarded.sticker.thumb;
-                      const fId = thumb ? thumb.file_id : forwarded.sticker.file_id;
-                      const link = await bot.getFileLink(fId).catch(() => null);
-                      if (link) {
-                        mediaBuffer = await downloadImage(link);
-                      }
-                    }
-                    // Clean up
-                    if (forwarded) bot.deleteMessage(forwardTarget, forwarded.message_id).catch(() => { });
-                  } catch (e) { }
-                }
-
-                // If still no buffer, try GramJS for thumbnails or original
-                if (!mediaBuffer && doc) {
-                  const isStickerDoc = doc.attributes.some(a => a.className === 'DocumentAttributeSticker');
-                  if (isStickerDoc && (doc.mimeType !== 'image/webp' || !doc.size)) {
+                if (photo) {
+                  // --- PHOTO: direct GramJS download ---
+                  mediaBuffer = await client.downloadMedia(m).catch(() => null);
+                } else if (isSticker) {
+                  // --- STICKER: download via GramJS ---
+                  // For webp stickers, download directly; for animated/video stickers, use thumbnail
+                  if (doc.mimeType === 'image/webp') {
+                    mediaBuffer = await client.downloadMedia(m).catch(() => null);
+                  } else {
+                    // Animated/video sticker — get the best thumbnail
                     const priority = ['v', 'm', 'y', 'x', 'w', 's'];
                     for (const p of priority) {
                       const thumb = doc.thumbs?.find(t => (t.type || t.size) === p);
@@ -264,17 +253,43 @@ module.exports = function (bot, deps) {
                         if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
                     }
-                  } else {
-                    mediaBuffer = await client.downloadMedia(m).catch(() => null);
+                    // Fallback: try full download
+                    if (!mediaBuffer) {
+                      mediaBuffer = await client.downloadMedia(m).catch(() => null);
+                    }
+                  }
+                } else if (doc && (isAnimated || isVideo)) {
+                  // --- ANIMATION/VIDEO: download thumbnail ---
+                  if (doc.thumbs?.length) {
+                    const priority = ['v', 'm', 'y', 'x', 'w', 's'];
+                    for (const p of priority) {
+                      const thumb = doc.thumbs.find(t => (t.type || t.size) === p);
+                      if (thumb) {
+                        mediaBuffer = await client.downloadFile(thumb).catch(() => null);
+                        if (mediaBuffer && mediaBuffer.length > 500) break;
+                      }
+                    }
+                  }
+                } else if (doc) {
+                  // --- OTHER DOCUMENT: download thumbnail if available ---
+                  if (doc.thumbs?.length) {
+                    const priority = ['v', 'm', 'y', 'x', 'w', 's'];
+                    for (const p of priority) {
+                      const thumb = doc.thumbs.find(t => (t.type || t.size) === p);
+                      if (thumb) {
+                        mediaBuffer = await client.downloadFile(thumb).catch(() => null);
+                        if (mediaBuffer && mediaBuffer.length > 500) break;
+                      }
+                    }
                   }
                 }
 
-                // Final fallback
+                // Final fallback for any media
                 if (!mediaBuffer) {
                   mediaBuffer = await client.downloadMedia(m.media).catch(() => null);
                 }
               } catch (e) {
-                console.error("Critical media bridge failed:", e);
+                console.error("Media download failed:", e.message);
               }
             }
 
@@ -397,6 +412,52 @@ module.exports = function (bot, deps) {
             console.log(`[Q Command] Sticker media download link=${link ? 'YES' : 'NO'} size=${mediaBuffer?.length || 0}`);
           } catch (e) {
             console.error("[Q Command] Sticker download failed:", e.message);
+          }
+        } else if (targetMsg.photo && targetMsg.photo.length > 0) {
+          // Download photo (pick the largest size)
+          try {
+            const bestPhoto = targetMsg.photo[targetMsg.photo.length - 1];
+            const link = await bot.getFileLink(bestPhoto.file_id);
+            mediaBuffer = await downloadImage(link);
+            console.log(`[Q Command] Photo media download link=${link ? 'YES' : 'NO'} size=${mediaBuffer?.length || 0}`);
+          } catch (e) {
+            console.error("[Q Command] Photo download failed:", e.message);
+          }
+        } else if (targetMsg.animation) {
+          // Download animation/GIF thumbnail
+          try {
+            const thumb = targetMsg.animation.thumbnail || targetMsg.animation.thumb;
+            if (thumb) {
+              const link = await bot.getFileLink(thumb.file_id);
+              mediaBuffer = await downloadImage(link);
+              console.log(`[Q Command] Animation thumb download size=${mediaBuffer?.length || 0}`);
+            }
+          } catch (e) {
+            console.error("[Q Command] Animation download failed:", e.message);
+          }
+        } else if (targetMsg.video) {
+          // Download video thumbnail
+          try {
+            const thumb = targetMsg.video.thumbnail || targetMsg.video.thumb;
+            if (thumb) {
+              const link = await bot.getFileLink(thumb.file_id);
+              mediaBuffer = await downloadImage(link);
+              console.log(`[Q Command] Video thumb download size=${mediaBuffer?.length || 0}`);
+            }
+          } catch (e) {
+            console.error("[Q Command] Video thumb download failed:", e.message);
+          }
+        } else if (targetMsg.document) {
+          // Download document thumbnail if available
+          try {
+            const thumb = targetMsg.document.thumbnail || targetMsg.document.thumb;
+            if (thumb) {
+              const link = await bot.getFileLink(thumb.file_id);
+              mediaBuffer = await downloadImage(link);
+              console.log(`[Q Command] Document thumb download size=${mediaBuffer?.length || 0}`);
+            }
+          } catch (e) {
+            console.error("[Q Command] Document thumb download failed:", e.message);
           }
         }
 

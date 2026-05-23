@@ -36,7 +36,7 @@ async function dummyAvatar(f, l, color) {
  * Generates a Telegram-style quote sticker using the remote Quote API.
  * Following the "perfect" method from test_run.js: uses plain text and entities.
  */
-async function createImage(firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities = [], replyEntities = []) {
+async function createImage(firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities = [], replyEntities = [], options = {}) {
     // Standardize input into a list of messages
     const rawList = Array.isArray(firstName) ? firstName : [{
         firstName,
@@ -53,6 +53,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         id: '1',
         isAbsoluteLast: true
     }];
+
+    // Also support passing options as the second argument if the first is an array
+    const finalOptions = Array.isArray(firstName) ? (lastName || {}) : options;
 
     const API_URL = 'https://quotlytga-quotecpp.hf.space/api/generate';
 
@@ -150,8 +153,8 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             telegram_user_id: parseInt(processedMessages[0]?.from?.id || 0),
             emoji_ids: [...new Set(allEmojiIds)]
         },
-        transparent: true,
-        webp: true,
+        transparent: finalOptions.transparent !== undefined ? finalOptions.transparent : true,
+        webp: finalOptions.webp !== undefined ? finalOptions.webp : true,
         messages: processedMessages
     };
 

@@ -260,6 +260,7 @@ module.exports = function (bot, deps) {
 
             // 2. DOWNLOAD MEDIA (Stickers/Photos/Animations) — Direct GramJS download
             let mediaBuffer = null;
+            let isStickerForApi = false;
             if (m.media) {
               try {
                 const doc = m.media.document;
@@ -273,6 +274,7 @@ module.exports = function (bot, deps) {
                   mediaBuffer = await client.downloadMedia(m).catch(() => null);
                 } else if (isSticker) {
                   // --- STICKER: download via GramJS ---
+                  isStickerForApi = true;
                   // For webp stickers, download directly; for animated/video stickers, use thumbnail
                   if (doc.mimeType === 'image/webp') {
                     mediaBuffer = await client.downloadMedia(m).catch(() => null);
@@ -280,15 +282,18 @@ module.exports = function (bot, deps) {
                     // Animated/video sticker — get the best thumbnail
                     const priority = ['v', 'm', 'y', 'x', 'w', 's'];
                     for (const p of priority) {
-                      const thumb = doc.thumbs?.find(t => (t.type || t.size) === p);
+                      const thumb = doc.thumbs?.find(t => (t.type || t.size) === p || t.className === 'PhotoSize' || t.className === 'PhotoCachedSize');
                       if (thumb) {
                         mediaBuffer = await client.downloadFile(thumb).catch(() => null);
                         if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
                     }
-                    // Fallback: try full download
-                    if (!mediaBuffer) {
-                      mediaBuffer = await client.downloadMedia(m).catch(() => null);
+                    // Fallback to searching all thumbs if priority failed
+                    if (!mediaBuffer && doc.thumbs) {
+                        for (const thumb of doc.thumbs) {
+                            mediaBuffer = await client.downloadFile(thumb).catch(() => null);
+                            if (mediaBuffer && mediaBuffer.length > 500) break;
+                        }
                     }
                   }
                 } else if (doc && (isAnimated || isVideo)) {
@@ -296,11 +301,17 @@ module.exports = function (bot, deps) {
                   if (doc.thumbs?.length) {
                     const priority = ['v', 'm', 'y', 'x', 'w', 's'];
                     for (const p of priority) {
-                      const thumb = doc.thumbs.find(t => (t.type || t.size) === p);
+                      const thumb = doc.thumbs.find(t => (t.type || t.size) === p || t.className === 'PhotoSize' || t.className === 'PhotoCachedSize');
                       if (thumb) {
                         mediaBuffer = await client.downloadFile(thumb).catch(() => null);
                         if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
+                    }
+                    if (!mediaBuffer) {
+                        for (const thumb of doc.thumbs) {
+                            mediaBuffer = await client.downloadFile(thumb).catch(() => null);
+                            if (mediaBuffer && mediaBuffer.length > 500) break;
+                        }
                     }
                   }
                 } else if (doc) {
@@ -308,7 +319,7 @@ module.exports = function (bot, deps) {
                   if (doc.thumbs?.length) {
                     const priority = ['v', 'm', 'y', 'x', 'w', 's'];
                     for (const p of priority) {
-                      const thumb = doc.thumbs.find(t => (t.type || t.size) === p);
+                      const thumb = doc.thumbs.find(t => (t.type || t.size) === p || t.className === 'PhotoSize' || t.className === 'PhotoCachedSize');
                       if (thumb) {
                         mediaBuffer = await client.downloadFile(thumb).catch(() => null);
                         if (mediaBuffer && mediaBuffer.length > 500) break;
@@ -386,10 +397,11 @@ module.exports = function (bot, deps) {
               replyMessage: rText,
               replysendercolor: rColor,
               entities, mediaBuffer,
-              replyEntities: rEntities,
-              id: sender ? sender.id.toString() : '1',
-              isAbsoluteLast: false
-            });
+               replyEntities: rEntities,
+               id: sender ? sender.id.toString() : '1',
+               isSticker: isStickerForApi,
+               isAbsoluteLast: false
+             });
           }
           if (messagesToProcess.length > 0) {
             messagesToProcess[messagesToProcess.length - 1].isAbsoluteLast = true;
@@ -410,13 +422,21 @@ module.exports = function (bot, deps) {
         const chat = await bot.getChat(from.id).catch(() => ({}));
 
         let mediaBuffer = null;
+        let isStickerForApi = false;
         if (targetMsg.sticker) {
+          isStickerForApi = true;
           try {
             const thumbObj = targetMsg.sticker.thumbnail || targetMsg.sticker.thumb;
-            const fileId = thumbObj ? thumbObj.file_id : targetMsg.sticker.file_id;
-            const link = await bot.getFileLink(fileId);
-            mediaBuffer = await downloadImage(link);
-            console.log(`[Q Command] Sticker media download link=${link ? 'YES' : 'NO'} size=${mediaBuffer?.length || 0}`);
+            const fileId = (targetMsg.sticker.is_animated || targetMsg.sticker.is_video) ? (thumbObj ? thumbObj.file_id : null) : targetMsg.sticker.file_id;
+            
+            if (fileId) {
+                const link = await bot.getFileLink(fileId);
+                mediaBuffer = await downloadImage(link);
+            } else if (thumbObj) {
+                const link = await bot.getFileLink(thumbObj.file_id);
+                mediaBuffer = await downloadImage(link);
+            }
+            console.log(`[Q Command] Sticker media download size=${mediaBuffer?.length || 0}`);
           } catch (e) {
             console.error("[Q Command] Sticker download failed:", e.message);
           }
@@ -494,17 +514,30 @@ module.exports = function (bot, deps) {
           replyMessage: rText,
           replysendercolor: rColor,
           entities: targetMsg.entities || targetMsg.caption_entities || [],
-          mediaBuffer,
-          replyEntities: rEntities,
-          id: from.id.toString(),
-          isAbsoluteLast: true
-        });
+           mediaBuffer,
+           replyEntities: rEntities,
+           id: from.id.toString(),
+           isSticker: isStickerForApi,
+           isAbsoluteLast: true
+         });
       }
 
-      const stickerBuffer = await createQuoteSticker(messagesToProcess);
+      // Determine if it should be an image message
+      let totalTextLength = 0;
+      messagesToProcess.forEach(m => {
+        totalTextLength += (m.message || "").length;
+      });
 
-      if (count >= 4) {
-        await bot.sendDocument(chatId, stickerBuffer, { reply_to_message_id: targetMsg.message_id }, { filename: 'quote.png', contentType: 'image/png' });
+      const isImageMode = count > 2 || totalTextLength > 500;
+      const quoteOptions = {
+          transparent: true,
+          webp: !isImageMode
+      };
+
+      const stickerBuffer = await createQuoteSticker(messagesToProcess, quoteOptions);
+
+      if (isImageMode) {
+        await bot.sendPhoto(chatId, stickerBuffer, { reply_to_message_id: targetMsg.message_id }, { filename: 'quote.png', contentType: 'image/png' });
       } else {
         await bot.sendSticker(chatId, stickerBuffer, { reply_to_message_id: targetMsg.message_id }, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => {
           bot.sendSticker(chatId, stickerBuffer, {}, { filename: 'quote.webp', contentType: 'image/webp' }).catch(() => { });

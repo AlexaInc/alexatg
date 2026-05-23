@@ -154,7 +154,7 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
       return bot.sendMessage(msg.chat.id, 'Requires reply or valid JSON.');
     }
 
-    let firstName, lastName, msgtextt, replysender, replycontent, replysendercolor, chat, userphotourl;
+    let firstName, lastName, msgtextt, replysender, replycontent, replysendercolor, chat, userphotourl, replyEntities = [];
 
     try {
       if (hasValidPayload) {
@@ -182,6 +182,7 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
         lastName = reply.last_name || '';
         userphotourl = await getProfilePhoto(bot, reply.id);
         msgtextt = content || msg.reply_to_message.text || msg.reply_to_message.caption || ' ';
+        replyEntities = msg.reply_to_message.reply_to_message ? (msg.reply_to_message.reply_to_message.entities || msg.reply_to_message.reply_to_message.caption_entities || []) : [];
       }
 
       let entities = [];
@@ -216,7 +217,7 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
       const stickerBuffer = await createQuoteSticker(
         firstName, lastName, chat.emoji_status_custom_emoji_id, String(msgtextt),
         chat.accent_color_id, userphoto, replysender, replycontent, replysendercolor,
-        entities
+        entities, replyEntities
       );
 
 
@@ -247,11 +248,12 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
       const userPhoto = userPhotourl ? await downloadImage(userPhotourl) : null;
       const chat = await bot.getChat(from.id);
 
-      let replysender = null, replycontent = null, replysendercolor = null;
+      let replysender = null, replycontent = null, replysendercolor = null, replyEntities = [];
       if (msg.reply_to_message) {
         const rfrom = msg.reply_to_message.from;
         replysender = `${rfrom.first_name} ${rfrom.last_name || ''}`.trim();
         replycontent = msg.reply_to_message.text || null;
+        replyEntities = msg.reply_to_message.entities || msg.reply_to_message.caption_entities || [];
         const rchat = await bot.getChat(rfrom.id).catch(() => ({}));
         replysendercolor = rchat.accent_color_id;
       }
@@ -281,7 +283,8 @@ Total: \`${groupChatIds.size + userChatIds.size}\``;
         replysender,
         replycontent,
         replysendercolor,
-        entities
+        entities,
+        replyEntities
       );
 
       await bot.sendSticker(msg.chat.id, stickerBuffer, {

@@ -105,11 +105,13 @@ module.exports = function (bot, deps) {
       let replymsgUser = null;
       let replymsgContent = null;
       let replySenderColor = null;
+      let replyEntities = [];
 
       if (msg.reply_to_message) {
         const rFrom = msg.reply_to_message.from;
         replymsgUser = `${rFrom.first_name} ${rFrom.last_name || ''}`.trim() || 'Unknown';
         replymsgContent = msg.reply_to_message.text || msg.reply_to_message.caption || null;
+        replyEntities = msg.reply_to_message.entities || msg.reply_to_message.caption_entities || [];
         const rChat = await bot.getChat(rFrom.id).catch(() => ({}));
         replySenderColor = rChat.accent_color_id;
       }
@@ -139,7 +141,8 @@ module.exports = function (bot, deps) {
         replymsgUser,
         replymsgContent,
         replySenderColor,
-        entities
+        entities,
+        replyEntities
       );
 
       const fileOptions = {
@@ -176,6 +179,36 @@ module.exports = function (bot, deps) {
     const { getProfilePhoto, downloadImage, getUserbotClient, getJoinedEntity } = deps.handlers;
 
     try {
+      const mapGramjsEntities = (ents) => {
+        if (!ents) return [];
+        return ents.map(e => {
+          let type = 'unknown';
+          let custom_emoji_id, url, language;
+          if (e.className === 'MessageEntityBold') type = 'bold';
+          else if (e.className === 'MessageEntityItalic') type = 'italic';
+          else if (e.className === 'MessageEntityCode') type = 'code';
+          else if (e.className === 'MessageEntityStrike') type = 'strikethrough';
+          else if (e.className === 'MessageEntityUnderline') type = 'underline';
+          else if (e.className === 'MessageEntityPre') { type = 'pre'; language = e.language; }
+          else if (e.className === 'MessageEntitySpoiler') type = 'spoiler';
+          else if (e.className === 'MessageEntityBlockquote') type = 'blockquote';
+          else if (e.className === 'MessageEntityCustomEmoji') { type = 'custom_emoji'; custom_emoji_id = e.documentId?.toString(); }
+          else if (e.className === 'MessageEntityUrl') type = 'url';
+          else if (e.className === 'MessageEntityTextUrl') { type = 'text_link'; url = e.url; }
+          else if (e.className === 'MessageEntityMention') type = 'mention';
+          else if (e.className === 'MessageEntityMentionName') {
+            type = 'text_link';
+            if (e.userId) url = `tg://user?id=${e.userId.toString()}`;
+          }
+          else if (e.className === 'MessageEntityBotCommand') type = 'bot_command';
+          else if (e.className === 'MessageEntityHashtag') type = 'hashtag';
+          else if (e.className === 'MessageEntityCashtag') type = 'cashtag';
+          else if (e.className === 'MessageEntityPhone') type = 'phone_number';
+          else if (e.className === 'MessageEntityEmail') type = 'email';
+          return { type, offset: e.offset, length: e.length, custom_emoji_id, url, language };
+        }).filter(e => e.type !== 'unknown');
+      };
+
       let messagesToProcess = [];
       const client = await getUserbotClient();
 
@@ -299,35 +332,7 @@ module.exports = function (bot, deps) {
             } else if (m.id === targetMsg.message_id && targetMsg.caption_entities) {
                 entities = targetMsg.caption_entities;
             } else {
-                entities = (m.entities || []).map(e => {
-                  let type = 'unknown';
-                  let custom_emoji_id, url, language;
-                  if (e.className === 'MessageEntityBold') type = 'bold';
-                  else if (e.className === 'MessageEntityItalic') type = 'italic';
-                  else if (e.className === 'MessageEntityCode') type = 'code';
-                  else if (e.className === 'MessageEntityStrike') type = 'strikethrough';
-                  else if (e.className === 'MessageEntityUnderline') type = 'underline';
-                  else if (e.className === 'MessageEntityPre') { type = 'pre'; language = e.language; }
-                  else if (e.className === 'MessageEntitySpoiler') type = 'spoiler';
-                  else if (e.className === 'MessageEntityBlockquote') type = 'blockquote';
-                  else if (e.className === 'MessageEntityCustomEmoji') { type = 'custom_emoji'; custom_emoji_id = e.documentId?.toString(); }
-                  else if (e.className === 'MessageEntityUrl') type = 'url';
-                  else if (e.className === 'MessageEntityTextUrl') { type = 'text_link'; url = e.url; }
-                  else if (e.className === 'MessageEntityMention') type = 'mention';
-                  else if (e.className === 'MessageEntityMentionName') {
-                    // Map text_mention to text_link for better compatibility with Quotely API
-                    type = 'text_link';
-                    if (e.userId) {
-                      url = `tg://user?id=${e.userId.toString()}`;
-                    }
-                  }
-                  else if (e.className === 'MessageEntityBotCommand') type = 'bot_command';
-                  else if (e.className === 'MessageEntityHashtag') type = 'hashtag';
-                  else if (e.className === 'MessageEntityCashtag') type = 'cashtag';
-                  else if (e.className === 'MessageEntityPhone') type = 'phone_number';
-                  else if (e.className === 'MessageEntityEmail') type = 'email';
-                  return { type, offset: e.offset, length: e.length, custom_emoji_id, url, language };
-                }).filter(e => e.type !== 'unknown');
+                entities = mapGramjsEntities(m.entities);
             }
 
             // Forward info
@@ -353,6 +358,7 @@ module.exports = function (bot, deps) {
                   const ridStr = gf.fromId?.userId?.toString() || gf.fromId?.toString() || s?.id?.toString();
                   rUser = s ? (s.title || `${s.firstName || ''} ${s.lastName || ''}`.trim()) : 'User';
                   rText = gf.message || gf.caption || (gf.media ? "Media" : null);
+                  rEntities = mapGramjsEntities(gf.entities);
 
                   if (ridStr) {
                     if (colorCache.has(ridStr)) rColor = colorCache.get(ridStr);
@@ -380,6 +386,7 @@ module.exports = function (bot, deps) {
               replyMessage: rText,
               replysendercolor: rColor,
               entities, mediaBuffer,
+              replyEntities: rEntities,
               id: sender ? sender.id.toString() : '1',
               isAbsoluteLast: false
             });
@@ -471,6 +478,7 @@ module.exports = function (bot, deps) {
           const rf = targetMsg.reply_to_message.from;
           rUser = `${rf.first_name} ${rf.last_name || ''}`.trim() || 'User';
           rText = targetMsg.reply_to_message.text || targetMsg.reply_to_message.caption || (targetMsg.reply_to_message.sticker ? "Sticker" : "Media");
+          rEntities = targetMsg.reply_to_message.entities || targetMsg.reply_to_message.caption_entities || [];
           rColor = rf.id % 7;
         }
 
@@ -487,6 +495,7 @@ module.exports = function (bot, deps) {
           replysendercolor: rColor,
           entities: targetMsg.entities || targetMsg.caption_entities || [],
           mediaBuffer,
+          replyEntities: rEntities,
           id: from.id.toString(),
           isAbsoluteLast: true
         });

@@ -36,7 +36,7 @@ async function dummyAvatar(f, l, color) {
  * Generates a Telegram-style quote sticker using the remote Quote API.
  * Following the "perfect" method from test_run.js: uses plain text and entities.
  */
-async function createImage(firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities = []) {
+async function createImage(firstName, lastName, customemojiid, message, nameColorId, inputImageBuffer, replySender, replyMessage, replysendercolor, messageEntities = [], replyEntities = []) {
     // Standardize input into a list of messages
     const rawList = Array.isArray(firstName) ? firstName : [{
         firstName,
@@ -49,11 +49,12 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         replyMessage,
         replysendercolor,
         entities: messageEntities,
+        replyEntities: replyEntities,
         id: '1',
         isAbsoluteLast: true
     }];
 
-    const API_URL = 'https://quotlytga-quoteapi.hf.space/api/generate';
+    const API_URL = 'https://quotlytga-quotecpp.hf.space/api/generate';
 
     const processedMessages = await Promise.all(rawList.map(async (msg, idx) => {
         const color = getTelegramColor(msg.nameColorId);
@@ -88,31 +89,74 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             }
         }
 
-        // 3. Map to API Schema (Exactly as in test_run.js)
-        return {
-            id: String(msg.id || idx + 1),
-            firstName: msg.firstName || "User",
-            lastName: msg.lastName || "",
+        // 3. Map to API Schema (QuotlyNative C++ Structure)
+        const messageObj = {
+            text: msg.message || "",
+            entities: msg.entities || [],
+            from: {
+                id: parseInt(msg.id) || 0,
+                first_name: msg.firstName || "User",
+                last_name: msg.lastName || "",
+                emoji_status_custom_emoji_id: msg.customemojiid || null
+            },
             avatarBase64: avatarBase64,
-            customemojiid: msg.customemojiid || null,
-            message: msg.message || "", // PLAIN TEXT ONLY (API handles styling via entities)
             nameColorId: parseInt(msg.nameColorId) || 0,
-            entities: msg.entities || [], // STYLES GO HERE
-            mediaBase64: mediaBase64 || null,
-            isSticker: !!msg.mediaBuffer && (!msg.message || !msg.message.trim()),
-            replySender: msg.replySender || null,
-            replyMessage: msg.replyMessage || null,
-            replysendercolor: parseInt(msg.replysendercolor) || 0,
-            forwardName: msg.forwardName || null,
-            isAbsoluteLast: msg.isAbsoluteLast !== undefined ? msg.isAbsoluteLast : (idx === rawList.length - 1)
+            id: parseInt(msg.id) || 0
         };
+
+        if (mediaBase64) {
+            const isSticker = msg.isSticker !== undefined ? msg.isSticker : (!msg.message || !msg.message.trim());
+            messageObj.mediaType = isSticker ? "sticker" : "photo";
+            messageObj.mediaBase64 = mediaBase64;
+        }
+
+        if (msg.replyMessage) {
+            messageObj.reply_to = {
+                text: msg.replyMessage,
+                from: {
+                    id: 0,
+                    first_name: msg.replySender || "User",
+                    last_name: ""
+                },
+                entities: msg.replyEntities || []
+            };
+            // Support flat structure as well for compatibility
+            messageObj.replySender = msg.replySender || null;
+            messageObj.replyMessage = msg.replyMessage || null;
+            messageObj.replySenderColor = parseInt(msg.replysendercolor) || 0;
+        }
+
+        if (msg.forwardName) {
+            messageObj.forwardName = msg.forwardName;
+        }
+
+        return messageObj;
     }));
 
-    console.log(`🚀 [QuoteAPI] Sending ${processedMessages.length} messages to remote renderer...`);
+    console.log(`🚀 [QuoteAPI] Sending ${processedMessages.length} messages to QuotlyNative renderer...`);
+
+    const allEmojiIds = [];
+    processedMessages.forEach(m => {
+        if (m.from.emoji_status_custom_emoji_id) allEmojiIds.push(m.from.emoji_status_custom_emoji_id);
+        m.entities.forEach(e => {
+            if (e.type === 'custom_emoji' && e.custom_emoji_id) allEmojiIds.push(e.custom_emoji_id);
+        });
+    });
+
+    const payload = {
+        _info: {
+            api: "QuotlyNative",
+            endpoint: "POST /api/generate",
+            telegram_user_id: parseInt(processedMessages[0]?.from?.id || 0),
+            emoji_ids: [...new Set(allEmojiIds)]
+        },
+        transparent: true,
+        messages: processedMessages
+    };
 
     // Force bypass proxy (fixes the SSL port HTTP misrouting since Quote API is functional without proxy)
     try {
-        const response = await axios.post(API_URL, { messages: processedMessages }, {
+        const response = await axios.post(API_URL, payload, {
             responseType: 'arraybuffer',
             headers: { 'Content-Type': 'application/json' },
             timeout: 60000,

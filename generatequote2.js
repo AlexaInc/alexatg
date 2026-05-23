@@ -151,6 +151,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             emoji_ids: [...new Set(allEmojiIds)]
         },
         transparent: true,
+        webp: true,
         messages: processedMessages
     };
 

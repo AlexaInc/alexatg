@@ -348,7 +348,7 @@ module.exports = function (bot, deps) {
             }
 
             // 4. FETCH REPLY INFO AND COLOR
-            let rUser = null, rText = null, rColor = 0;
+            let rUser = null, rText = null, rColor = 0, rEntities = [];
             if (withReply && m.replyTo) {
               try {
                 const gfMsgs = await client.getMessages(chatEntity, { ids: [m.replyTo.replyToMsgId] });
@@ -473,7 +473,7 @@ module.exports = function (bot, deps) {
         else if (targetMsg.forward_from_chat) fName = targetMsg.forward_from_chat.title;
         else if (targetMsg.forward_sender_name) fName = targetMsg.forward_sender_name;
 
-        let rUser = null, rText = null, rColor = null;
+        let rUser = null, rText = null, rColor = null, rEntities = [];
         if (withReply && targetMsg.reply_to_message) {
           const rf = targetMsg.reply_to_message.from;
           rUser = `${rf.first_name} ${rf.last_name || ''}`.trim() || 'User';

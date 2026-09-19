@@ -161,34 +161,25 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             emoji_ids: [...new Set(allEmojiIds)]
         },
         transparent: finalOptions.transparent !== undefined ? finalOptions.transparent : true,
+        webp: finalOptions.webp !== undefined ? finalOptions.webp : true,
         messages: processedMessages
     };
 
-    // The native renderer always returns PNG; WEBP conversion happens locally below.
+    // The renderer returns PNG; WEBP conversion happens locally below.
     const wantWebp = finalOptions.format
         ? finalOptions.format === 'webp'
         : (finalOptions.webp !== false);
 
-    // --- Auth + retry --------------------------------------------------------
-    // Requests from a Space's egress IP to *.hf.space are rate-limited hard
-    // when anonymous (the host answers with an HTTP 429 HTML page). Sending an
-    // HF token identifies the caller and restores normal limits.
-    // Set QUOTE_HF_TOKEN (or HFTOKEN) as a secret on the calling service.
-    const QUOTE_TOKEN = process.env.QUOTE_HF_TOKEN || process.env.HFTOKEN || '';
-
+    // Anonymous request — same style as the working alexa-v3 client:
+    // plain JSON POST, proxy bypassed, no agent overrides, no auth header.
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const MAX_ATTEMPTS = 4;
 
     const render = async () => axios.post(API_URL, payload, {
         responseType: 'arraybuffer',
-        headers: {
-            'Content-Type': 'application/json',
-            ...(QUOTE_TOKEN ? { Authorization: `Bearer ${QUOTE_TOKEN}` } : {})
-        },
-        timeout: 60000,
-        proxy: false, // bypass any HTTP(S)_PROXY env routing
-        httpAgent: false,
-        httpsAgent: false
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 30000,
+        proxy: false
     });
 
     try {
@@ -240,9 +231,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             const detail = p ? p[1].replace(/\s+/g, ' ').trim() : (h1 ? h1[1].trim() : body.slice(0, 120));
             errorMsg2 = `HTTP ${status}: ${detail}`;
             if (status === 429) {
-                errorMsg2 += QUOTE_TOKEN
-                    ? ' (rate limited even with auth — retry shortly)'
-                    : ' (rate limited; set the QUOTE_HF_TOKEN secret to authenticate renderer requests)';
+                errorMsg2 += ' (temporary host limit — retrying in a moment usually clears it)';
             }
         }
         console.error('❌ [QuoteAPI] Error:', errorMsg2);

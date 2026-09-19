@@ -169,16 +169,45 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         ? finalOptions.format === 'webp'
         : (finalOptions.webp !== false);
 
-    // Force bypass proxy (fixes the SSL port HTTP misrouting since Quote API is functional without proxy)
+    // --- Auth + retry --------------------------------------------------------
+    // Requests from a Space's egress IP to *.hf.space are rate-limited hard
+    // when anonymous (the host answers with an HTTP 429 HTML page). Sending an
+    // HF token identifies the caller and restores normal limits.
+    // Set QUOTE_HF_TOKEN (or HFTOKEN) as a secret on the calling service.
+    const QUOTE_TOKEN = process.env.QUOTE_HF_TOKEN || process.env.HFTOKEN || '';
+
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const MAX_ATTEMPTS = 4;
+
+    const render = async () => axios.post(API_URL, payload, {
+        responseType: 'arraybuffer',
+        headers: {
+            'Content-Type': 'application/json',
+            ...(QUOTE_TOKEN ? { Authorization: `Bearer ${QUOTE_TOKEN}` } : {})
+        },
+        timeout: 60000,
+        proxy: false, // bypass any HTTP(S)_PROXY env routing
+        httpAgent: false,
+        httpsAgent: false
+    });
+
     try {
-        const response = await axios.post(API_URL, payload, {
-            responseType: 'arraybuffer',
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 60000,
-            proxy: false,
-            httpAgent: false,
-            httpsAgent: false
-        });
+        let response;
+        for (let attempt = 1; ; attempt++) {
+            try {
+                response = await render();
+                break;
+            } catch (e) {
+                const status = e.response ? e.response.status : 0;
+                const retryable = status === 429 || status === 502 || status === 503 || status === 504 ||
+                    e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT';
+                if (!retryable || attempt >= MAX_ATTEMPTS) throw e;
+                const ra = e.response && e.response.headers ? parseFloat(e.response.headers['retry-after']) : NaN;
+                const delay = (!isNaN(ra) && ra > 0) ? Math.min(ra * 1000, 20000) : Math.min(1500 * 2 ** (attempt - 1), 15000);
+                console.warn(`[QuoteAPI] HTTP ${status || e.code} — retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
+                await sleep(delay);
+            }
+        }
         const png = Buffer.from(response.data);
         console.log(`✅ [QuoteAPI] Sticker generated successfully (${png.length} bytes)`);
 
@@ -200,7 +229,22 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             return png;
         }
     } catch (err2) {
-        const errorMsg2 = err2.response ? err2.response.data.toString() : err2.message;
+        // Condense HTML error pages (the host's 429/503 pages are huge)
+        let errorMsg2 = err2.message || String(err2);
+        if (err2.response) {
+            const status = err2.response.status;
+            let body = '';
+            try { body = Buffer.from(err2.response.data || '').toString('utf8'); } catch (e) { }
+            const h1 = body.match(/<h1>\s*([^<]{1,80}?)\s*<\/h1>/);
+            const p = body.match(/<p>\s*([^<]{5,200}?)\s*<\/p>/);
+            const detail = p ? p[1].replace(/\s+/g, ' ').trim() : (h1 ? h1[1].trim() : body.slice(0, 120));
+            errorMsg2 = `HTTP ${status}: ${detail}`;
+            if (status === 429) {
+                errorMsg2 += QUOTE_TOKEN
+                    ? ' (rate limited even with auth — retry shortly)'
+                    : ' (rate limited; set the QUOTE_HF_TOKEN secret to authenticate renderer requests)';
+            }
+        }
         console.error('❌ [QuoteAPI] Error:', errorMsg2);
         throw new Error(`Quote API rendering failed: ${errorMsg2}`);
     }

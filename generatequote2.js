@@ -179,14 +179,23 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         : (finalOptions.webp !== false);
 
     // Anonymous request — same style as the working alexa-v3 client:
-    // plain JSON POST, proxy bypassed, no agent overrides, no auth header.
+    // plain JSON POST, proxy bypassed, no agent overrides.
+    // OPTIONAL: when a token env is set (QUOTE_HF_TOKEN or HFTOKEN), it is
+    // sent as a Bearer header. The render host only limits ANONYMOUS requests
+    // coming from inside its own cloud platform — an authenticated request
+    // passes normally, so this is the no-relay fix for same-platform
+    // deployments. Any access token works (read-only is enough).
+    const RENDER_TOKEN = process.env.QUOTE_HF_TOKEN || process.env.HFTOKEN || '';
     // Each retry attempt rotates to the next configured endpoint.
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const MAX_ATTEMPTS = 4;
 
     const render = (url) => axios.post(url, payload, {
         responseType: 'arraybuffer',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            ...(RENDER_TOKEN ? { Authorization: `Bearer ${RENDER_TOKEN}` } : {})
+        },
         timeout: 30000,
         proxy: false
     });

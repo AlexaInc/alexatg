@@ -1,0 +1,15 @@
+# Keep the build context small so Space builds stay fast and reliable
+node_modules
+.git
+.env
+*.log
+.bot_session_*
+*.session
+aicount.json
+ids.json
+groups.json
+users.json
+smoketest_wrapper.js
+Dockerfile
+.dockerignore
+README.md

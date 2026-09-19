@@ -12,7 +12,6 @@
 const { TelegramClient, Api } = require('telegram');
 const { StringSession } = require('telegram/sessions');
 const { NewMessage } = require('telegram/events');
-const { Raw } = require('telegram/events');
 const { Button } = require('telegram/tl/custom/button');
 const { CustomFile } = require('telegram/client/uploads');
 const bigInt = require('big-integer');
@@ -38,19 +37,39 @@ class GramJSBot extends EventEmitter {
     this._entityCache = new Map();
     this._updateOffset = 0;
     this._processedMsgIds = new Set(); // Dedup: prevent double-processing same message
+    this._processedServiceIds = new Set(); // Dedup for service messages (join/leave)
     // Unique session file per bot token so main + secondary don't collide
-    const tokenHash = crypto.createHash('md5').update(token).digest('hex').substring(0, 8);
-    this._sessionPath = path.join(__dirname, `.bot_session_${tokenHash}`);
+    const tokenHash = crypto.createHash('md5').update(String(token)).digest('hex').substring(0, 8);
+    // Prefer a writable directory (Hugging Face containers have a writable /tmp,
+    // and the app dir is writable too, but be defensive anyway)
+    const sessionDir = this._getWritableDir();
+    this._sessionPath = path.join(sessionDir, `.bot_session_${tokenHash}`);
     
     // API credentials - must be set in env
     this.apiId = Number(process.env.API_ID) || 24388624;
     this.apiHash = process.env.API_HASH || 'aa6e6675a9a88534f8ded7f318394d5f';
   }
 
+  _getWritableDir() {
+    const candidates = [__dirname, process.env.TMPDIR, '/tmp', require('os').tmpdir()]
+      .filter(Boolean);
+    for (const dir of candidates) {
+      try {
+        require('fs').accessSync(dir, require('fs').constants.W_OK);
+        return dir;
+      } catch (e) { /* try next */ }
+    }
+    return require('os').tmpdir();
+  }
+
   async _initClient() {
     let sessionStr = '';
     if (fs.existsSync(this._sessionPath)) {
-      sessionStr = fs.readFileSync(this._sessionPath, 'utf8').trim();
+      try {
+        sessionStr = fs.readFileSync(this._sessionPath, 'utf8').trim();
+      } catch (e) {
+        sessionStr = '';
+      }
     }
 
     this._client = new TelegramClient(
@@ -74,9 +93,13 @@ class GramJSBot extends EventEmitter {
       botAuthToken: this.token,
     });
 
-    // Save session for faster restarts
-    const savedSession = this._client.session.save();
-    fs.writeFileSync(this._sessionPath, savedSession);
+    // Save session for faster restarts (never crash on read-only filesystems)
+    try {
+      const savedSession = this._client.session.save();
+      fs.writeFileSync(this._sessionPath, savedSession);
+    } catch (e) {
+      // Non-fatal: session persistence is an optimization, not a requirement
+    }
 
     this._me = await this._client.getMe();
     console.log(`[GramJS Bot] Connected as @${this._me.username} (${this._me.id})`);
@@ -103,7 +126,7 @@ class GramJSBot extends EventEmitter {
       }
     }, new NewMessage({}));
 
-    // Handle ALL raw updates (callbacks, chat_member, poll, etc.)
+    // Handle ALL raw updates (callbacks, chat_member, poll, inline, service msgs, etc.)
     this._client.addEventHandler(async (update) => {
       try {
         // Callback query
@@ -116,9 +139,28 @@ class GramJSBot extends EventEmitter {
           await this._handlePollVote(update);
           return;
         }
-        // Chat participant updates
+        // Inline queries (needed by the secondary bot's quiz sharing)
+        if (update instanceof Api.UpdateBotInlineQuery) {
+          await this._handleInlineQuery(update);
+          return;
+        }
+        // Service messages (joins / leaves) — the NewMessage event builder
+        // silently DROPS MessageService objects, so we must catch them here
+        // or welcome/goodbye/invite tracking never fires.
+        if (update instanceof Api.UpdateNewMessage || update instanceof Api.UpdateNewChannelMessage) {
+          if (update.message instanceof Api.MessageService) {
+            await this._handleServiceMessage(update.message);
+          }
+          return;
+        }
+        // Chat participant updates (supergroups/channels)
         if (update instanceof Api.UpdateChatParticipant || update instanceof Api.UpdateChannelParticipant) {
           await this._handleRawUpdate(update);
+          return;
+        }
+        // Basic-group add/remove (legacy updates — supergroups use the two above)
+        if (update instanceof Api.UpdateChatParticipantAdd || update instanceof Api.UpdateChatParticipantDelete) {
+          await this._handleBasicGroupMemberUpdate(update);
           return;
         }
       } catch (e) {
@@ -144,6 +186,11 @@ class GramJSBot extends EventEmitter {
   // ─── Internal Update Handlers ───────────────────────────────────
 
   async _handleNewMessage(event) {
+    // Skip the bot's OWN outgoing messages. The Bot API never delivers a
+    // bot's own sent messages in getUpdates, so processing them here would
+    // cause echo loops / double activity counting.
+    if (event.message && event.message.out) return;
+
     // Dedup: skip if we already processed this message ID + chat
     // Use normalized peer string to avoid object stringification differences
     const peer = event.message.peerId;
@@ -217,16 +264,126 @@ class GramJSBot extends EventEmitter {
     this.emit('callback_query', query);
   }
 
+  async _handleInlineQuery(update) {
+    try {
+      const query = {
+        id: String(update.queryId),
+        from: await this._getUser(update.userId),
+        query: update.query || '',
+        offset: update.offset || '',
+      };
+      if (!query.from || !query.from.id) {
+        query.from = { id: this._toNum(update.userId), is_bot: false, first_name: 'User' };
+      }
+      this.emit('inline_query', query);
+    } catch (e) {
+      console.error('[GramJS Bot] Error handling inline query:', e.message);
+    }
+  }
+
+  // Convert MTProto service messages (joins/leaves) into Bot API messages.
+  // Without this, new_chat_members / left_chat_member never fire because the
+  // GramJS NewMessage event builder drops MessageService objects entirely.
+  async _handleServiceMessage(gramMsg) {
+    if (!gramMsg || !gramMsg.action) return;
+
+    const action = gramMsg.action;
+    let newChatMembers = null;
+    let leftChatMember = null;
+
+    if (action instanceof Api.MessageActionChatAddUser) {
+      // Someone added users (or the bot)
+      const ids = (action.users || []).map(u => this._toNum(u));
+      newChatMembers = await Promise.all(ids.map(id => this._getUser(id)));
+    } else if (action instanceof Api.MessageActionChatJoinedByLink) {
+      // User joined via invite link — the joiner is the message sender
+      const joiner = await this._getUser(gramMsg.fromId);
+      if (joiner && joiner.id) newChatMembers = [joiner];
+    } else if (action instanceof Api.MessageActionChatDeleteUser) {
+      // User removed / left
+      const userId = this._toNum(action.userId);
+      if (userId) leftChatMember = await this._getUser(userId);
+    } else {
+      // Other service actions (title/photo changes, pins, calls…) — not needed
+      return;
+    }
+
+    // Dedup (same message can be delivered twice on reconnect)
+    const dedupKey = `${gramMsg.id}_${newChatMembers ? 'add' : 'del'}_${this._toNum(gramMsg.fromId)}`;
+    if (this._processedServiceIds.has(dedupKey)) return;
+    this._processedServiceIds.add(dedupKey);
+    if (this._processedServiceIds.size > 500) {
+      this._processedServiceIds = new Set([...this._processedServiceIds].slice(-250));
+    }
+
+    const msg = {
+      message_id: gramMsg.id,
+      date: gramMsg.date,
+      chat: await this._convertPeer(gramMsg.peerId, gramMsg.chat || gramMsg._chat),
+      from: await this._getUser(gramMsg.fromId),
+    };
+    if (!msg.from || !msg.from.id) {
+      msg.from = { id: 0, is_bot: false, first_name: 'Unknown' };
+    }
+    // Channel posts (e.g. channel itself) have no from
+    if (gramMsg.peerId instanceof Api.PeerChannel && !gramMsg.fromId) {
+      msg.sender_chat = msg.chat;
+    }
+
+    if (newChatMembers && newChatMembers.length > 0) {
+      msg.new_chat_members = newChatMembers;
+      // node-telegram-bot-api emits BOTH 'message' and the subtype — keep parity
+      this.emit('message', msg);
+      this.emit('new_chat_members', msg);
+    } else if (leftChatMember && leftChatMember.id) {
+      msg.left_chat_member = leftChatMember;
+      this.emit('message', msg);
+      this.emit('left_chat_member', msg);
+    }
+  }
+
+  // Legacy basic-group (non-supergroup) join/leave updates
+  async _handleBasicGroupMemberUpdate(update) {
+    try {
+      if (update instanceof Api.UpdateChatParticipantAdd) {
+        const user = await this._getUser(update.userId);
+        const msg = {
+          message_id: -1,
+          date: update.date,
+          chat: { id: -this._toNum(update.chatId), type: 'group' },
+          from: await this._getUser(update.actorId || update.userId),
+          new_chat_members: [user && user.id ? user : { id: this._toNum(update.userId), is_bot: false, first_name: 'User' }],
+        };
+        this.emit('message', msg);
+        this.emit('new_chat_members', msg);
+      } else if (update instanceof Api.UpdateChatParticipantDelete) {
+        const user = await this._getUser(update.userId);
+        const msg = {
+          message_id: -1,
+          date: update.date,
+          chat: { id: -this._toNum(update.chatId), type: 'group' },
+          from: await this._getUser(update.actorId || update.userId),
+          left_chat_member: user && user.id ? user : { id: this._toNum(update.userId), is_bot: false, first_name: 'User' },
+        };
+        this.emit('message', msg);
+        this.emit('left_chat_member', msg);
+      }
+    } catch (e) {
+      // Never let member updates crash the update loop
+    }
+  }
+
   async _handleRawUpdate(update) {
-    // Handle UpdateBotChatInviteRequester, UpdateChatParticipant, etc.
+    // Handle UpdateChatParticipant / UpdateChannelParticipant (supergroups)
     if (update instanceof Api.UpdateChatParticipant ||
         update instanceof Api.UpdateChannelParticipant) {
-      // Convert to bot API format for my_chat_member / chat_member
-      // This is a simplified handler
-      const memberUpdate = this._convertChatMemberUpdate(update);
-      if (memberUpdate) {
-        this.emit('chat_member', memberUpdate);
-        this.emit('my_chat_member', memberUpdate);
+      try {
+        const memberUpdate = await this._convertChatMemberUpdate(update);
+        if (memberUpdate) {
+          this.emit('chat_member', memberUpdate);
+        }
+      } catch (e) {
+        // ignore conversion failures
       }
     }
   }
@@ -353,6 +510,10 @@ class GramJSBot extends EventEmitter {
       // Reply — must ALWAYS set reply_to_message if there's a reply
       const replyMsgId = gramMsg.replyTo?.replyToMsgId;
       if (replyMsgId) {
+        // NOTE: these MUST be declared (strict mode inside a class would
+        // otherwise throw ReferenceError and drop every replied-to message)
+        let senderId = 0;
+        let replyFrom = null;
         try {
           const chatEntity = await this._client.getEntity(gramMsg.peerId);
           // Use client.getMessages — it auto-resolves sender when possible
@@ -554,7 +715,7 @@ class GramJSBot extends EventEmitter {
         const photo = media.photo;
         const sizes = photo.sizes || [];
         msg.photo = sizes.map((s, i) => ({
-          file_id: this._buildFileId('photo', photo.id, photo.accessHash, photo.fileReference, s),
+          file_id: this._buildFileId('photo', photo.id, photo.accessHash, photo.fileReference, s, photo),
           file_unique_id: String(photo.id),
           width: s.w || 0,
           height: s.h || 0,
@@ -574,7 +735,7 @@ class GramJSBot extends EventEmitter {
         const isGif = isAnimated || (isVideo && doc.mimeType === 'video/mp4' && attrs.some(a => a instanceof Api.DocumentAttributeVideo && !a.roundMessage));
 
         const fileInfo = {
-          file_id: this._buildFileId('document', doc.id, doc.accessHash, doc.fileReference),
+          file_id: this._buildFileId('document', doc.id, doc.accessHash, doc.fileReference, null, doc),
           file_unique_id: String(doc.id),
           file_size: Number(doc.size) || 0,
           mime_type: doc.mimeType,
@@ -674,12 +835,27 @@ class GramJSBot extends EventEmitter {
     return converted;
   }
 
-  _buildFileId(type, id, accessHash, fileReference, sizeInfo) {
-    // Store reference in cache for downloads
-    const key = `${type}_${id}_${sizeInfo ? (sizeInfo.type || 'x') : 'doc'}`;
-    this._entityCache.set(key, { type, id, accessHash, fileReference, sizeInfo });
+  _buildFileId(type, id, accessHash, fileReference, sizeInfo, rawObj) {
+    // Store reference in cache for downloads (rawObj is the Api.Photo /
+    // Api.Document itself — needed so downloads use a VALID fileReference)
+    const sizeType = sizeInfo ? (sizeInfo.type || 'x') : 'doc';
+    const key = `${type}_${id}_${sizeType}`;
+    this._entityCache.set(key, { type, id, accessHash, fileReference, sizeInfo, sizeType, rawObj });
+    // Cap the cache so long-running bots don't leak memory
+    if (this._entityCache.size > 3000) {
+      const keys = [...this._entityCache.keys()];
+      for (let i = 0; i < 1500; i++) this._entityCache.delete(keys[i]);
+    }
     // Return a synthetic file_id that we can decode later
-    return `gramjs:${type}:${id}:${accessHash}:${sizeInfo ? (sizeInfo.type || 'x') : 'doc'}`;
+    return `gramjs:${type}:${id}:${accessHash}:${sizeType}`;
+  }
+
+  // Find any cached entry for a media type + raw id (ignores size suffix)
+  _findCacheEntry(type, rawId) {
+    const direct = [...this._entityCache.entries()].reverse().find(
+      ([k, v]) => v.type === type && String(v.id) === String(rawId)
+    );
+    return direct ? direct[1] : null;
   }
 
   async _convertPeer(peerId, chatEntity) {
@@ -825,18 +1001,27 @@ class GramJSBot extends EventEmitter {
 
       // Fetch the message that was clicked
       if (update.msgId && update.peer) {
+        // Derive the Bot API chat id from the peer (works for users, chats and channels)
+        const chatIdFromPeer = () => {
+          if (update.peer instanceof Api.PeerUser) return this._toNum(update.peer.userId);
+          if (update.peer instanceof Api.PeerChat) return -this._toNum(update.peer.chatId);
+          if (update.peer instanceof Api.PeerChannel) return -Number(`100${this._toNum(update.peer.channelId)}`);
+          return 0;
+        };
         try {
           const chatEntity = await this._client.getEntity(update.peer);
           const msgs = await this._client.getMessages(chatEntity, { ids: [update.msgId] });
-          if (msgs && msgs[0]) {
-            query.message = await this._convertMessage(msgs[0]);
+          const m = msgs && msgs[0];
+          // Old messages may come back as MessageEmpty — still build a usable
+          // minimal message so callback handlers have a real chat id.
+          if (m && m.className === 'Message') {
+            query.message = await this._convertMessage(m);
+          } else {
+            const chatId = chatIdFromPeer();
+            query.message = { message_id: update.msgId, chat: { id: chatId, type: chatId > 0 ? 'private' : 'supergroup' } };
           }
         } catch (e) {
-          // Build minimal message object from peer info
-          let chatId = 0;
-          if (update.peer instanceof Api.PeerUser) chatId = Number(update.peer.userId);
-          else if (update.peer instanceof Api.PeerChat) chatId = -Number(update.peer.chatId);
-          else if (update.peer instanceof Api.PeerChannel) chatId = -Number(`100${update.peer.channelId}`);
+          const chatId = chatIdFromPeer();
           query.message = { message_id: update.msgId, chat: { id: chatId, type: chatId > 0 ? 'private' : 'supergroup' } };
         }
       }
@@ -852,9 +1037,68 @@ class GramJSBot extends EventEmitter {
     }
   }
 
-  _convertChatMemberUpdate(update) {
-    // Simplified conversion
-    return null; // Will be handled by polling if needed
+  // Map an MTProto participant object to a Bot API ChatMember {status, user, ...}
+  _participantToChatMember(participant, user) {
+    if (!participant) return null;
+    const base = { user: user || { id: 0, is_bot: false, first_name: 'Unknown' } };
+    if (participant instanceof Api.ChannelParticipantCreator) {
+      return { status: 'creator', ...base, ...this._extractAdminRights(participant.adminRights) };
+    }
+    if (participant instanceof Api.ChannelParticipantAdmin) {
+      return { status: 'administrator', ...base, ...this._extractAdminRights(participant.adminRights), custom_title: participant.rank || '' };
+    }
+    if (participant instanceof Api.ChannelParticipantBanned) {
+      if (participant.bannedRights && participant.bannedRights.viewMessages) {
+        return { status: 'kicked', ...base, until_date: participant.bannedRights.untilDate || 0 };
+      }
+      return { status: 'restricted', ...base, ...this._extractBannedRights(participant.bannedRights), until_date: participant.bannedRights?.untilDate || 0 };
+    }
+    if (participant instanceof Api.ChannelParticipantLeft) {
+      return { status: 'left', ...base };
+    }
+    if (participant instanceof Api.ChatParticipantCreator) {
+      return { status: 'creator', ...base };
+    }
+    if (participant instanceof Api.ChatParticipantAdmin) {
+      return { status: 'administrator', ...base };
+    }
+    // ChannelParticipantSelf / ChannelParticipantMember / ChatParticipant
+    return { status: 'member', ...base };
+  }
+
+  async _convertChatMemberUpdate(update) {
+    // Supergroup / channel participant update
+    if (update instanceof Api.UpdateChannelParticipant) {
+      const channelId = this._toNum(update.channelId);
+      const chat = { id: -Number(`100${channelId}`), type: 'supergroup' };
+      const [from, user] = await Promise.all([
+        this._getUser(update.actorId).catch(() => null),
+        this._getUser(update.userId).catch(() => null),
+      ]);
+      return {
+        chat,
+        from: from && from.id ? from : { id: this._toNum(update.actorId), is_bot: false, first_name: 'Unknown' },
+        date: update.date,
+        old_chat_member: this._participantToChatMember(update.prevParticipant, user),
+        new_chat_member: this._participantToChatMember(update.newParticipant, user),
+      };
+    }
+    // Basic group participant update
+    if (update instanceof Api.UpdateChatParticipant) {
+      const chat = { id: -this._toNum(update.chatId), type: 'group' };
+      const [from, user] = await Promise.all([
+        this._getUser(update.actorId).catch(() => null),
+        this._getUser(update.userId).catch(() => null),
+      ]);
+      return {
+        chat,
+        from: from && from.id ? from : { id: this._toNum(update.actorId), is_bot: false, first_name: 'Unknown' },
+        date: update.date,
+        old_chat_member: this._participantToChatMember(update.prevParticipant, user),
+        new_chat_member: this._participantToChatMember(update.newParticipant, user),
+      };
+    }
+    return null;
   }
 
   // ─── Resolve chat ID to GramJS entity ──────────────────────────
@@ -1040,10 +1284,27 @@ class GramJSBot extends EventEmitter {
       } else if (typeof photo === 'string') {
         if (photo.startsWith('gramjs:')) {
           const parts = photo.split(':');
+          const cached = this._findCacheEntry('photo', parts[2]);
+          if (cached && cached.rawObj) {
+            // Resend the exact photo object we cached (valid file reference)
+            const result = await this._client.sendFile(entity, {
+              file: new Api.InputPhoto({
+                id: cached.rawObj.id,
+                accessHash: cached.rawObj.accessHash,
+                fileReference: cached.rawObj.fileReference,
+              }),
+              caption: sendOpts.caption,
+              parseMode: sendOpts.parseMode,
+              replyTo: sendOpts.replyTo,
+              buttons: sendOpts.buttons,
+              silent: sendOpts.silent,
+            });
+            return await this._convertMessage(result);
+          }
           const inputPhoto = new Api.InputPhoto({
             id: BigInt(parts[2]),
             accessHash: BigInt(parts[3]),
-            fileReference: Buffer.alloc(0),
+            fileReference: (cached && cached.fileReference) || Buffer.alloc(0),
           });
           const result = await this._client.sendFile(entity, { file: inputPhoto, ...sendOpts });
           return await this._convertMessage(result);
@@ -1106,10 +1367,18 @@ class GramJSBot extends EventEmitter {
     if (typeof file !== 'string') return file;
     if (file.startsWith('gramjs:')) {
       const parts = file.split(':');
+      const cached = this._findCacheEntry('document', parts[2]);
+      if (cached && cached.rawObj) {
+        return new Api.InputDocument({
+          id: cached.rawObj.id,
+          accessHash: cached.rawObj.accessHash,
+          fileReference: cached.rawObj.fileReference,
+        });
+      }
       return new Api.InputDocument({
         id: BigInt(parts[2]),
         accessHash: BigInt(parts[3]),
-        fileReference: Buffer.alloc(0),
+        fileReference: (cached && cached.fileReference) || Buffer.alloc(0),
       });
     }
     if (file.startsWith('http://') || file.startsWith('https://')) return file;
@@ -1167,7 +1436,38 @@ class GramJSBot extends EventEmitter {
   }
 
   async sendAnimation(chatId, animation, options = {}) {
-    return this.sendDocument(chatId, animation, { ...options, filename: 'animation.gif' });
+    // Send as a PLAYABLE animation (Bot API semantics), not a document.
+    try {
+      const entity = await this._resolveChat(chatId);
+      const resolvedFile = this._resolveFile(animation);
+      if (resolvedFile === null) {
+        return await this.sendMessage(chatId, options.caption || '🎬 (animation)', options);
+      }
+      let file = resolvedFile;
+      if (Buffer.isBuffer(file)) {
+        const name = options.filename || 'animation.gif';
+        file = new CustomFile(name, file.length, '', file);
+      }
+      const result = await this._client.sendFile(entity, {
+        file: file,
+        caption: options.caption || '',
+        parseMode: this._getParseMode(options.parse_mode),
+        replyTo: options.reply_to_message_id,
+        buttons: options.reply_markup ? this._convertMarkup(options.reply_markup) : undefined,
+        silent: options.disable_notification || false,
+        forceDocument: false,
+        attributes: [new Api.DocumentAttributeAnimated({})],
+      });
+      return await this._convertMessage(result);
+    } catch (e) {
+      console.error(`[GramJS Bot] sendAnimation error:`, e.message);
+      // Fallback: send as document (still delivers the content)
+      try {
+        return await this.sendDocument(chatId, animation, options);
+      } catch (e2) {
+        throw e;
+      }
+    }
   }
 
   async sendSticker(chatId, sticker, options = {}, fileOptions = {}) {
@@ -1207,11 +1507,66 @@ class GramJSBot extends EventEmitter {
   }
 
   async sendVoice(chatId, voice, options = {}) {
-    return this.sendDocument(chatId, voice, options, { filename: 'voice.ogg' });
+    // Send as a playable voice note (round audio), like the Bot API does.
+    try {
+      const entity = await this._resolveChat(chatId);
+      const resolvedFile = this._resolveFile(voice);
+      if (resolvedFile === null) {
+        return await this.sendMessage(chatId, options.caption || '🎤 (voice)', options);
+      }
+      let file = resolvedFile;
+      if (Buffer.isBuffer(file)) {
+        file = new CustomFile('voice.ogg', file.length, '', file);
+      }
+      const result = await this._client.sendFile(entity, {
+        file: file,
+        caption: options.caption || '',
+        parseMode: this._getParseMode(options.parse_mode),
+        replyTo: options.reply_to_message_id,
+        buttons: options.reply_markup ? this._convertMarkup(options.reply_markup) : undefined,
+        silent: options.disable_notification || false,
+        forceDocument: false,
+        voiceNote: true,
+      });
+      return await this._convertMessage(result);
+    } catch (e) {
+      console.error(`[GramJS Bot] sendVoice error:`, e.message);
+      return await this.sendDocument(chatId, voice, options, { filename: 'voice.ogg' });
+    }
   }
 
   async sendAudio(chatId, audio, options = {}) {
-    return this.sendDocument(chatId, audio, options, { filename: 'audio.mp3' });
+    // Send as playable audio, like the Bot API does.
+    try {
+      const entity = await this._resolveChat(chatId);
+      const resolvedFile = this._resolveFile(audio);
+      if (resolvedFile === null) {
+        return await this.sendMessage(chatId, options.caption || '🎵 (audio)', options);
+      }
+      let file = resolvedFile;
+      if (Buffer.isBuffer(file)) {
+        file = new CustomFile('audio.mp3', file.length, '', file);
+      }
+      const result = await this._client.sendFile(entity, {
+        file: file,
+        caption: options.caption || '',
+        parseMode: this._getParseMode(options.parse_mode),
+        replyTo: options.reply_to_message_id,
+        buttons: options.reply_markup ? this._convertMarkup(options.reply_markup) : undefined,
+        silent: options.disable_notification || false,
+        forceDocument: false,
+        attributes: [new Api.DocumentAttributeAudio({
+          voice: false,
+          duration: options.duration || 0,
+          title: options.title || '',
+          performer: options.performer || '',
+        })],
+      });
+      return await this._convertMessage(result);
+    } catch (e) {
+      console.error(`[GramJS Bot] sendAudio error:`, e.message);
+      return await this.sendDocument(chatId, audio, options, { filename: 'audio.mp3' });
+    }
   }
 
   async sendVideoNote(chatId, videoNote, options = {}) {
@@ -1270,7 +1625,9 @@ class GramJSBot extends EventEmitter {
         media: mediaPoll,
         message: '',
         randomId: BigInt(Math.floor(Math.random() * 1e15)),
-        replyToMsgId: options.reply_to_message_id,
+        replyTo: options.reply_to_message_id
+          ? new Api.InputReplyToMessage({ replyToMsgId: options.reply_to_message_id })
+          : undefined,
         silent: options.disable_notification || false,
       }));
 
@@ -1305,9 +1662,21 @@ class GramJSBot extends EventEmitter {
       const poll = msg.media.poll;
       poll.closed = true;
 
-      const mediaPoll = new Api.InputMediaPoll({
-        poll: poll,
-      });
+      // Quizzes MUST re-submit their correct answers when editing,
+      // otherwise the server rejects the edit with POLL_ANSWERS_INVALID.
+      const closeParams = { poll: poll };
+      if (poll.quiz && msg.media.results?.results) {
+        const correct = msg.media.results.results
+          .filter(r => r.correct)
+          .map(r => r.option);
+        if (correct.length > 0) closeParams.correctAnswers = correct;
+      }
+      if (msg.media.results?.solution) {
+        closeParams.solution = msg.media.results.solution;
+        closeParams.solutionEntities = msg.media.results.solutionEntities || [];
+      }
+
+      const mediaPoll = new Api.InputMediaPoll(closeParams);
 
       const result = await this._client.invoke(new Api.messages.EditMessage({
         peer: inputPeer,
@@ -1371,13 +1740,13 @@ class GramJSBot extends EventEmitter {
           replyMarkup: this._client.buildReplyMarkup(markup),
         }));
       } else {
-        // To clear buttons, edit with no replyMarkup field at all
-        // Some Telegram versions reject empty ReplyInlineMarkup, so we suppress the error
+        // To clear buttons, omit the replyMarkup field entirely —
+        // passing null is invalid for the generated serializer
         try {
           await this._client.invoke(new Api.messages.EditMessage({
             peer: inputPeer,
             id: options.message_id,
-            replyMarkup: null,
+            replyMarkup: undefined,
           }));
         } catch (clearErr) {
           // Silently ignore — button clearing not critical, quiz continues normally
@@ -1441,8 +1810,9 @@ class GramJSBot extends EventEmitter {
           return { status: 'member', user };
         }
       } else {
-        // Basic group
-        const result = await this._client.invoke(new Api.messages.GetFullChat({ chatId: entity.id }));
+        // Basic group — pass the entity itself; the generated request
+        // resolves EntityLike values (entity.id is undefined for InputPeerChat)
+        const result = await this._client.invoke(new Api.messages.GetFullChat({ chatId: entity }));
         const participants = result.fullChat.participants?.participants || [];
         const found = participants.find(p => {
           const pId = p.userId?.valueOf ? p.userId.valueOf() : Number(p.userId);
@@ -1507,11 +1877,11 @@ class GramJSBot extends EventEmitter {
           admins.push(adminEntry);
         }
       } else {
-        // Basic group
+        // Basic group — pass the entity itself (EntityLike resolution)
         const result = await this._client.invoke(new Api.messages.GetFullChat({
-          chatId: entity.id,
+          chatId: entity,
         }));
-        
+
         const participants = result.fullChat.participants?.participants || [];
         for (const p of participants) {
           if (p instanceof Api.ChatParticipantCreator || p instanceof Api.ChatParticipantAdmin) {
@@ -1648,7 +2018,7 @@ class GramJSBot extends EventEmitter {
         }));
       } else {
         await this._client.invoke(new Api.messages.DeleteChatUser({
-          chatId: entity.id,
+          chatId: entity, // EntityLike — works for Chat and InputPeerChat
           userId: userEntity,
         }));
       }
@@ -1722,6 +2092,38 @@ class GramJSBot extends EventEmitter {
       return true;
     } catch (e) {
       console.error(`[GramJS Bot] promoteChatMember error:`, e.message);
+      throw e;
+    }
+  }
+
+  async setChatAdministratorCustomTitle(chatId, userId, customTitle) {
+    // Bot API setChatAdministratorCustomTitle — keep the admin's existing
+    // rights and only change the rank/title.
+    try {
+      const entity = await this._resolveChat(chatId);
+      if (!(entity instanceof Api.Channel)) {
+        throw new Error('Custom titles are only available in supergroups');
+      }
+      const userEntity = await this._resolveUser(userId);
+
+      const result = await this._client.invoke(new Api.channels.GetParticipant({
+        channel: entity,
+        participant: userEntity,
+      }));
+      const p = result.participant;
+      if (!(p instanceof Api.ChannelParticipantAdmin)) {
+        throw new Error('USER_IS_NOT_AN_ADMINISTRATOR');
+      }
+
+      await this._client.invoke(new Api.channels.EditAdmin({
+        channel: entity,
+        userId: userEntity,
+        adminRights: p.adminRights,
+        rank: String(customTitle || '').slice(0, 16),
+      }));
+      return true;
+    } catch (e) {
+      console.error(`[GramJS Bot] setChatAdministratorCustomTitle error:`, e.message);
       throw e;
     }
   }
@@ -1823,7 +2225,7 @@ class GramJSBot extends EventEmitter {
         total_count: result.photos?.length || 0,
         photos: (result.photos || []).map(photo => {
           return (photo.sizes || []).map(s => ({
-            file_id: this._buildFileId('photo', photo.id, photo.accessHash, photo.fileReference, s),
+            file_id: this._buildFileId('photo', photo.id, photo.accessHash, photo.fileReference, s, photo),
             file_unique_id: String(photo.id),
             width: s.w || 0,
             height: s.h || 0,
@@ -1878,33 +2280,57 @@ class GramJSBot extends EventEmitter {
       // Synthetic file_id from our wrapper
       const parts = fileId.split(':');
       const type = parts[1];
-      const docId = BigInt(parts[2]);
-      const accessHash = BigInt(parts[3]);
-      
-      // Download file via GramJS
+      const rawId = parts[2];
+      const accessHash = parts[3];
+      const sizeType = parts[4] || 'x';
+
+      // Preferred path: we cached the real Api.Photo / Api.Document when the
+      // message arrived — downloadMedia handles file references and DC
+      // routing correctly (raw InputPhotoFileLocation with an empty
+      // fileReference fails with FILE_REFERENCE_INVALID).
       try {
+        const cached = this._findCacheEntry(type, rawId);
+        if (cached && cached.rawObj) {
+          let buffer = null;
+          if (cached.type === 'photo') {
+            buffer = await this._client.downloadMedia(cached.rawObj, undefined, cached.sizeType || sizeType);
+          } else {
+            buffer = await this._client.downloadMedia(cached.rawObj);
+          }
+          if (buffer && buffer.length > 0) {
+            const mime = cached.rawObj.mimeType || (cached.type === 'photo' ? 'image/jpeg' : 'application/octet-stream');
+            return `data:${mime};base64,${buffer.toString('base64')}`;
+          }
+        }
+      } catch (e) {
+        console.error(`[GramJS Bot] getFileLink cached download error:`, e.message);
+      }
+
+      // Fallback: manual file location (works only while the file reference
+      // is still fresh and the file lives on the default DC)
+      try {
+        const cachedRef = this._findCacheEntry(type, rawId);
+        const fileReference = (cachedRef && cachedRef.fileReference && cachedRef.fileReference.length > 0)
+          ? cachedRef.fileReference
+          : Buffer.alloc(0);
         let inputLocation;
         if (type === 'photo') {
           inputLocation = new Api.InputPhotoFileLocation({
-            id: docId,
-            accessHash: accessHash,
-            fileReference: Buffer.alloc(0),
-            thumbSize: parts[4] || 'x',
+            id: BigInt(rawId),
+            accessHash: BigInt(accessHash),
+            fileReference: fileReference,
+            thumbSize: sizeType,
           });
         } else {
           inputLocation = new Api.InputDocumentFileLocation({
-            id: docId,
-            accessHash: accessHash,
-            fileReference: Buffer.alloc(0),
+            id: BigInt(rawId),
+            accessHash: BigInt(accessHash),
+            fileReference: fileReference,
             thumbSize: '',
           });
         }
 
-        const buffer = await this._client.downloadFile(inputLocation, {
-          dcId: undefined,
-          fileSize: undefined,
-          workers: 1,
-        });
+        const buffer = await this._client.downloadFile(inputLocation, {});
 
         if (buffer && buffer.length > 0) {
           const mime = type === 'photo' ? 'image/jpeg' : 'application/octet-stream';
@@ -2003,20 +2429,69 @@ class GramJSBot extends EventEmitter {
     }
   }
 
+  // ─── Inline Query Answer (Bot API answerInlineQuery) ──────────
+
+  async answerInlineQuery(inlineQueryId, results = [], options = {}) {
+    try {
+      if (!this._client) return true;
+      let qId;
+      try {
+        qId = BigInt(String(inlineQueryId));
+      } catch (e) {
+        return true;
+      }
+
+      const apiResults = [];
+      for (const r of (results || []).slice(0, 50)) {
+        if (!r) continue;
+        const messageText =
+          (r.input_message_content && r.input_message_content.message_text) ||
+          r.title ||
+          '';
+        apiResults.push(new Api.InputBotInlineResult({
+          id: String(r.id || Math.floor(Math.random() * 1e9)),
+          type: r.type || 'article',
+          title: r.title || '',
+          description: r.description || '',
+          url: r.url || undefined,
+          sendMessage: new Api.InputBotInlineMessageText({
+            message: messageText,
+            entities: [],
+          }),
+        }));
+      }
+
+      if (apiResults.length === 0) return true;
+
+      await this._client.invoke(new Api.messages.SetInlineBotResults({
+        queryId: qId,
+        results: apiResults,
+        gallery: options.is_personal ? false : undefined,
+        private: options.is_personal || undefined,
+        cacheTime: options.cache_time !== undefined ? options.cache_time : 10,
+      }));
+      return true;
+    } catch (e) {
+      console.error('[GramJS Bot] answerInlineQuery error:', e.message);
+      return false;
+    }
+  }
+
   // ─── Forward Methods ───────────────────────────────────────────
 
   async forwardMessage(chatId, fromChatId, messageId) {
     try {
       const toEntity = await this._resolveChat(chatId);
       const fromEntity = await this._resolveChat(fromChatId);
-      
+
       const result = await this._client.forwardMessages(toEntity, {
         messages: [messageId],
         fromPeer: fromEntity,
       });
 
-      if (result && result[0]) {
-        return await this._convertMessage(result[0]);
+      const first = Array.isArray(result) ? result[0] : result;
+      if (first) {
+        return await this._convertMessage(first);
       }
       return { message_id: 0 };
     } catch (e) {
@@ -2053,7 +2528,9 @@ class GramJSBot extends EventEmitter {
             return Button.inline(btn.text, Buffer.from(btn.callback_data));
           } else if (btn.url) {
             return Button.url(btn.text, btn.url);
-          } else if (btn.switch_inline_query !== undefined) {
+          } else if (btn.switch_inline_query_current_chat !== undefined && btn.switch_inline_query_current_chat !== null) {
+            return Button.switchInline(btn.text, true, btn.switch_inline_query_current_chat || '');
+          } else if (btn.switch_inline_query !== undefined && btn.switch_inline_query !== null) {
             return Button.switchInline(btn.text, false, btn.switch_inline_query || '');
           } else {
             return Button.inline(btn.text, Buffer.from(btn.text));
@@ -2087,9 +2564,18 @@ class GramJSBot extends EventEmitter {
 
   _cacheEntity(msg) {
     // Cache entities for faster resolution
-    if (msg.peerId) {
-      const key = `peer_${JSON.stringify(msg.peerId)}`;
-      // Will be cached by GramJS internally
+    if (msg && msg.peerId) {
+      // NOTE: JSON.stringify would throw "Do not know how to serialize a
+      // BigInt" on MTProto peers — use a safe key instead.
+      try {
+        const peer = msg.peerId;
+        let key;
+        if (peer instanceof Api.PeerUser) key = `peer_u${this._toNum(peer.userId)}`;
+        else if (peer instanceof Api.PeerChat) key = `peer_c${this._toNum(peer.chatId)}`;
+        else if (peer instanceof Api.PeerChannel) key = `peer_ch${this._toNum(peer.channelId)}`;
+        else key = 'peer_other';
+        this._entityCache.set(key, true);
+      } catch (e) { /* never let caching break message flow */ }
     }
   }
 }

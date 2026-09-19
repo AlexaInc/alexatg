@@ -42,6 +42,11 @@ async function connectToDatabases() {
   const SECONDARY_MONGO_URI = process.env.SECONDARY_MONGO_URI;
   const DATING_MONGO_URI = process.env.DATING_MONGO_URI;
 
+  if (!MONGO_URI) {
+    console.error("❌ mongouri is not set — database features disabled. Set it in the Space secrets.");
+    return;
+  }
+
   try {
     await mongoose.connect(MONGO_URI);
     console.log("✅ MongoDB Connected");

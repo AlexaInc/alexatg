@@ -1,5 +1,5 @@
 const { Api } = require('telegram');
-const callToAi = require('../aii.js');
+const aii = require('../aii.js');
 const createQuoteSticker = require('../generatequote2');
 
 module.exports = function (bot, deps) {
@@ -45,28 +45,49 @@ module.exports = function (bot, deps) {
 
     const usermsg = text.includes(' ') ? text.substring(text.indexOf(' ') + 1) : '';
 
-    if (!usermsg && !isSpecialUser) {
+    if (!usermsg && !isSpecialUser && !msg.reply_to_message) {
       return bot.sendMessage(chatId, "Please provide a prompt. \nExample: <code>/ai What is a bot?</code>", { reply_to_message_id: msg.message_id, parse_mode: 'HTML' });
     }
 
     let uid = (chatId == userId) ? chatId : `${chatId}@${userId}`;
 
+    // Vision: reply to a photo and ask about it — the AI engine can read images
+    let image = null;
+    const replied = msg.reply_to_message;
+    if (replied && replied.photo && Array.isArray(replied.photo) && replied.photo.length > 0) {
+      try {
+        const best = replied.photo[replied.photo.length - 1];
+        image = await bot.downloadFile(best.file_id);
+      } catch (e) {
+        console.error('AI image download failed:', e.message);
+      }
+    }
+
     try {
-      if (isSpecialUser) {
-        const aimsg = await callToAi(usermsg, uid);
-        bot.sendMessage(chatId, aimsg, { reply_to_message_id: msg.message_id });
-      } else {
+      if (!isSpecialUser) {
         const countWasIncremented = await updateUserCount_Optimized(uid);
-        if (countWasIncremented) {
-          const aimsg = await callToAi(usermsg, uid);
-          bot.sendMessage(chatId, aimsg, { reply_to_message_id: msg.message_id });
-        } else {
-          bot.sendMessage(chatId, "Your daily AI limit has been reached.", { reply_to_message_id: msg.message_id });
+        if (!countWasIncremented) {
+          return bot.sendMessage(chatId, "Your daily AI limit has been reached.", { reply_to_message_id: msg.message_id });
         }
+      }
+
+      const aimsg = await aii.aiChat({
+        message: usermsg,
+        userId,
+        chatId,
+        chatType: msg.chat.type,
+        userName: [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || 'there',
+        chatName: msg.chat.title,
+        image: image || undefined,
+        messageId: msg.message_id,
+      });
+
+      if (aimsg) {
+        bot.sendMessage(chatId, aimsg, { reply_to_message_id: msg.message_id }).catch(() => { });
       }
     } catch (err) {
       console.error("AI command error:", err);
-      bot.sendMessage(chatId, "❌ AI service encountered an error.");
+      bot.sendMessage(chatId, "❌ AI service encountered an error.").catch(() => { });
     }
   });
 
@@ -284,14 +305,14 @@ module.exports = function (bot, deps) {
                     for (const p of priority) {
                       const thumb = doc.thumbs?.find(t => (t.type || t.size) === p || t.className === 'PhotoSize' || t.className === 'PhotoCachedSize');
                       if (thumb) {
-                        mediaBuffer = await client.downloadFile(thumb).catch(() => null);
+                        mediaBuffer = await client.downloadMedia(doc, undefined, thumb).catch(() => null);
                         if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
                     }
                     // Fallback to searching all thumbs if priority failed
                     if (!mediaBuffer && doc.thumbs) {
                         for (const thumb of doc.thumbs) {
-                            mediaBuffer = await client.downloadFile(thumb).catch(() => null);
+                            mediaBuffer = await client.downloadMedia(doc, undefined, thumb).catch(() => null);
                             if (mediaBuffer && mediaBuffer.length > 500) break;
                         }
                     }
@@ -303,13 +324,13 @@ module.exports = function (bot, deps) {
                     for (const p of priority) {
                       const thumb = doc.thumbs.find(t => (t.type || t.size) === p || t.className === 'PhotoSize' || t.className === 'PhotoCachedSize');
                       if (thumb) {
-                        mediaBuffer = await client.downloadFile(thumb).catch(() => null);
+                        mediaBuffer = await client.downloadMedia(doc, undefined, thumb).catch(() => null);
                         if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
                     }
                     if (!mediaBuffer) {
                         for (const thumb of doc.thumbs) {
-                            mediaBuffer = await client.downloadFile(thumb).catch(() => null);
+                            mediaBuffer = await client.downloadMedia(doc, undefined, thumb).catch(() => null);
                             if (mediaBuffer && mediaBuffer.length > 500) break;
                         }
                     }
@@ -321,7 +342,7 @@ module.exports = function (bot, deps) {
                     for (const p of priority) {
                       const thumb = doc.thumbs.find(t => (t.type || t.size) === p || t.className === 'PhotoSize' || t.className === 'PhotoCachedSize');
                       if (thumb) {
-                        mediaBuffer = await client.downloadFile(thumb).catch(() => null);
+                        mediaBuffer = await client.downloadMedia(doc, undefined, thumb).catch(() => null);
                         if (mediaBuffer && mediaBuffer.length > 500) break;
                       }
                     }

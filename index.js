@@ -10,7 +10,6 @@ const mongoose = require("mongoose");
 
 const { spawn } = require('child_process');
 const path = require('path');
-const moment = require('moment-timezone');
 const FilterManager = require('filtermatics');
 
 // Globally suppress harmless GramJS TIMEOUT reconnects from spamming the console
@@ -31,7 +30,17 @@ const { Invite, UserMap, BannedUser, NSFWSetting, accceptMap, Antilink, Antilink
 
 // --- CONFIG ---
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const botOWNER_IDS = process.env.botOWNER_IDS.split(',').map(id => parseInt(id));
+// Guard env parsing — a missing var must never crash-loop the container
+const botOWNER_IDS = (process.env.botOWNER_IDS || '')
+  .split(',')
+  .map(s => parseInt(s.trim()))
+  .filter(n => !isNaN(n));
+if (!BOT_TOKEN) {
+  console.error('❌ BOT_TOKEN is not set. Bot will stay idle (web server keeps running).');
+}
+if (botOWNER_IDS.length === 0) {
+  console.error('⚠️ botOWNER_IDS is not set or invalid — no owner commands will work.');
+}
 // We will load Special Users from MongoDB after connection
 let allIds = [];
 let Specialuser = [...botOWNER_IDS];
@@ -57,7 +66,7 @@ const activeQuizzes = {};
 const userRegistrationState = {};
 
 // --- BOT INSTANCE (GRAMJS - MTProto, NO api.telegram.org) ---
-const bot = new GramJSBot(BOT_TOKEN, {
+const bot = new GramJSBot(BOT_TOKEN || '0:missing-token', {
   polling: {
     autoStart: false,
   }
@@ -69,6 +78,10 @@ let contactKeyboard = null;
 
 // Safe polling start via GramJS
 const startPollingClean = async () => {
+  if (!BOT_TOKEN) {
+    console.error('Polling not started: BOT_TOKEN missing.');
+    return;
+  }
   // Wait for any old instance to fully die
   await new Promise(r => setTimeout(r, 3000));
   try {
@@ -134,9 +147,14 @@ db.connectToDatabases().then(async () => {
 const CustomQuizModel = db.getCustomQuizModel();
 const UserQuizScoreModel = db.getUserQuizScoreModel();
 
-// Spawn secondary bot
-const secondaryBotProcess = spawn('node', [path.join(__dirname, 'secondary_bot.js')], { stdio: 'inherit' });
-secondaryBotProcess.on('error', (err) => console.error('Failed to start secondary_bot.js:', err));
+// Spawn secondary bot (only when configured — avoids instant-exit child noise)
+let secondaryBotProcess = null;
+if (process.env.SECONDARY_BOT_TOKEN && process.env.SECONDARY_MONGO_URI) {
+  secondaryBotProcess = spawn('node', [path.join(__dirname, 'secondary_bot.js')], { stdio: 'inherit' });
+  secondaryBotProcess.on('error', (err) => console.error('Failed to start secondary_bot.js:', err));
+} else {
+  console.log('ℹ️ Secondary bot not started (SECONDARY_BOT_TOKEN / SECONDARY_MONGO_URI not set).');
+}
 
 // Graceful shutdown helper
 const stopBots = async () => {
@@ -224,12 +242,14 @@ const deps = {
 };
 
 // --- LOAD COMMAND MODULES ---
-require('./commands/admin')(bot, deps);
-require('./commands/common')(bot, deps);
-require('./commands/owner')(bot, deps);
-require('./commands/ranking')(bot, deps);
-require('./commands/welcome')(bot, deps);
-require('./commands/games')(bot, deps);
+// A broken module must never take the whole bot (and the Space) down.
+for (const mod of ['./commands/admin', './commands/common', './commands/owner', './commands/ranking', './commands/welcome', './commands/games']) {
+  try {
+    require(mod)(bot, deps);
+  } catch (e) {
+    console.error(`❌ Failed to load ${mod}:`, e.message);
+  }
+}
 
 // Load sub-modules
 try {
@@ -244,7 +264,7 @@ try {
   const wordchainModule = require('./modules/wordchain')(bot, deps.db);
   deps.wordchain = wordchainModule;
 } catch (e) { console.log('Wordchain module not loaded:', e.message); }
-try { require('./modules/moderation')(bot, deps); } catch (e) { console.log('Moderation module not loaded:', e.message); }
+try { require('./modules/moderation')(bot, deps); } catch (e) { console.error('❌ Moderation module not loaded (welcome/goodbye/antilink disabled):', e.message); }
 try { require('./modules/dating')(bot, deps); } catch (e) { console.log('Dating module not loaded:', e.message); }
 
 // Load event handlers
@@ -322,93 +342,12 @@ bot.on('message', async (msg) => {
   }
 });
 
-// --- Welcome / Goodbye Handler ---
-bot.on('message', async (msg) => {
-  // new_chat_members
-  if (msg.new_chat_members) {
-    for (const member of msg.new_chat_members) {
-      try {
-        const settings = await WelcomeSettings.findOne({ groupId: String(msg.chat.id) });
-        if (!settings || !settings.welcomeEnabled) continue;
-
-        const text = (settings.welcomeMessage || 'Welcome to {gname}, {first}!')
-          .replace(/{first}/g, member.first_name || '')
-          .replace(/{last}/g, member.last_name || '')
-          .replace(/{user}/g, member.username ? `@${member.username}` : member.first_name)
-          .replace(/{id}/g, member.id)
-          .replace(/{mention}/g, `<a href="tg://user?id=${member.id}">${member.first_name}</a>`)
-          .replace(/{gname}/g, msg.chat.title || '')
-          .replace(/{greating}/g, helpers.getGreeting())
-          .replace(/{time}/g, moment().tz('Asia/Colombo').format('HH:mm'))
-          .replace(/{date}/g, moment().tz('Asia/Colombo').format('YYYY-MM-DD'))
-          .replace(/{day}/g, moment().tz('Asia/Colombo').format('dddd'));
-
-        let sentMsg;
-        if (settings.welcomeType === 'photo' && settings.welcomeFileId) {
-          sentMsg = await bot.sendPhoto(msg.chat.id, settings.welcomeFileId, { caption: text, parse_mode: 'HTML' });
-        } else if (settings.welcomeType === 'video' && settings.welcomeFileId) {
-          sentMsg = await bot.sendVideo(msg.chat.id, settings.welcomeFileId, { caption: text, parse_mode: 'HTML' });
-        } else {
-          sentMsg = await bot.sendMessage(msg.chat.id, text, { parse_mode: 'HTML' });
-        }
-
-        // Clean welcome
-        if (settings.cleanWelcome && sentMsg) {
-          setTimeout(() => {
-            bot.deleteMessage(msg.chat.id, sentMsg.message_id).catch(() => { });
-          }, 5 * 60 * 1000);
-        }
-      } catch (e) {
-        console.error('Welcome handler error:', e.message);
-      }
-    }
-  }
-
-  // left_chat_member
-  if (msg.left_chat_member) {
-    try {
-      const settings = await WelcomeSettings.findOne({ groupId: String(msg.chat.id) });
-      if (!settings || !settings.goodbyeEnabled) return;
-
-      const member = msg.left_chat_member;
-      const text = (settings.goodbyeMessage || 'Goodbye, {first}!')
-        .replace(/{first}/g, member.first_name || '')
-        .replace(/{last}/g, member.last_name || '')
-        .replace(/{user}/g, member.username ? `@${member.username}` : member.first_name)
-        .replace(/{id}/g, member.id)
-        .replace(/{mention}/g, `<a href="tg://user?id=${member.id}">${member.first_name}</a>`)
-        .replace(/{gname}/g, msg.chat.title || '');
-
-      if (settings.goodbyeType === 'photo' && settings.goodbyeFileId) {
-        await bot.sendPhoto(msg.chat.id, settings.goodbyeFileId, { caption: text, parse_mode: 'HTML' });
-      } else if (settings.goodbyeType === 'video' && settings.goodbyeFileId) {
-        await bot.sendVideo(msg.chat.id, settings.goodbyeFileId, { caption: text, parse_mode: 'HTML' });
-      } else {
-        await bot.sendMessage(msg.chat.id, text, { parse_mode: 'HTML' });
-      }
-    } catch (e) {
-      console.error('Goodbye handler error:', e.message);
-    }
-  }
-});
-
-// --- Invite Tracking ---
-bot.on('message', async (msg) => {
-  if (msg.new_chat_members && msg.from) {
-    for (const member of msg.new_chat_members) {
-      if (member.id !== msg.from.id) {
-        // Someone was added by msg.from
-        try {
-          await Invite.updateOne(
-            { groupId: String(msg.chat.id), userId: String(msg.from.id) },
-            { $inc: { count: 1 } },
-            { upsert: true }
-          );
-        } catch (e) { /* ignore */ }
-      }
-    }
-  }
-});
+// --- Welcome / Goodbye / Invite tracking ---
+// NOTE: these are handled by modules/moderation (new_chat_members /
+// left_chat_member / chat_member events), which has the full-featured
+// versions (media welcome, clean-welcome tracking, invite announcements).
+// The duplicate handlers that used to live here were removed so each join
+// triggers exactly ONE welcome and ONE invite count.
 
 // --- Contact Keyboard Builder ---
 (async () => {

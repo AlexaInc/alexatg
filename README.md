@@ -9,4 +9,4 @@ pinned: false
 ---
 
 # SysSync Core V1
-System Synchronization API Service and Telegram Bot.
+System Synchronization API Service.

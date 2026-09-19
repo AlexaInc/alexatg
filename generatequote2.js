@@ -57,9 +57,17 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     // Also support passing options as the second argument if the first is an array
     const finalOptions = Array.isArray(firstName) ? (lastName || {}) : options;
 
-    // QuotlyNative (C++) renderer — docs: https://github.com/AlexaInc/QuotlyNative
-    // POST /quote is the native endpoint; /api/generate is the JS-compat alias.
-    const API_URL = 'https://quotlytga-quotecpp.hf.space/api/generate';
+    // Renderer endpoints (QuotlyNative C++ — docs: https://github.com/AlexaInc/QuotlyNative).
+    // The direct host applies very strict limits to anonymous requests that
+    // originate from inside the same cloud platform as itself. When running on
+    // that platform, set QUOTE_API_URL to a relay URL (tools/renderer-relay);
+    // multiple URLs may be comma-separated and are tried in order.
+    // Requests stay anonymous — no auth anywhere.
+    const DEFAULT_API_URL = 'https://quotlytga-quotecpp.hf.space/api/generate';
+    const API_URLS = [
+        ...(process.env.QUOTE_API_URL ? process.env.QUOTE_API_URL.split(',').map(s => s.trim()).filter(Boolean) : []),
+        DEFAULT_API_URL,
+    ].filter((u, i, a) => a.indexOf(u) === i);
 
     const processedMessages = await Promise.all(rawList.map(async (msg, idx) => {
         const color = getTelegramColor(msg.nameColorId);
@@ -172,10 +180,11 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
 
     // Anonymous request — same style as the working alexa-v3 client:
     // plain JSON POST, proxy bypassed, no agent overrides, no auth header.
+    // Each retry attempt rotates to the next configured endpoint.
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const MAX_ATTEMPTS = 4;
 
-    const render = async () => axios.post(API_URL, payload, {
+    const render = (url) => axios.post(url, payload, {
         responseType: 'arraybuffer',
         headers: { 'Content-Type': 'application/json' },
         timeout: 30000,
@@ -185,17 +194,20 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     try {
         let response;
         for (let attempt = 1; ; attempt++) {
+            const url = API_URLS[(attempt - 1) % API_URLS.length];
             try {
-                response = await render();
+                response = await render(url);
                 break;
             } catch (e) {
                 const status = e.response ? e.response.status : 0;
-                const retryable = status === 429 || status === 502 || status === 503 || status === 504 ||
-                    e.code === 'ECONNRESET' || e.code === 'ETIMEDOUT';
+                // No-response (network) errors are always worth a retry on the
+                // next endpoint; HTTP 4xx client errors (e.g. 400) fail fast.
+                const retryable = !status || status === 429 || status === 502 || status === 503 || status === 504;
                 if (!retryable || attempt >= MAX_ATTEMPTS) throw e;
                 const ra = e.response && e.response.headers ? parseFloat(e.response.headers['retry-after']) : NaN;
                 const delay = (!isNaN(ra) && ra > 0) ? Math.min(ra * 1000, 20000) : Math.min(1500 * 2 ** (attempt - 1), 15000);
-                console.warn(`[QuoteAPI] HTTP ${status || e.code} — retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
+                const next = API_URLS[attempt % API_URLS.length];
+                console.warn(`[QuoteAPI] ${status ? 'HTTP ' + status : e.code || 'network error'} from ${url} — retrying via ${next} in ${Math.round(delay)}ms (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
                 await sleep(delay);
             }
         }
@@ -221,7 +233,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         }
     } catch (err2) {
         // Condense HTML error pages (the host's 429/503 pages are huge)
-        let errorMsg2 = err2.message || String(err2);
+        let errorMsg2 = err2.code || err2.message || String(err2);
         if (err2.response) {
             const status = err2.response.status;
             let body = '';

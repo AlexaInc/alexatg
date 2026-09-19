@@ -57,6 +57,8 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
     // Also support passing options as the second argument if the first is an array
     const finalOptions = Array.isArray(firstName) ? (lastName || {}) : options;
 
+    // QuotlyNative (C++) renderer — docs: https://github.com/AlexaInc/QuotlyNative
+    // POST /quote is the native endpoint; /api/generate is the JS-compat alias.
     const API_URL = 'https://quotlytga-quotecpp.hf.space/api/generate';
 
     const processedMessages = await Promise.all(rawList.map(async (msg, idx) => {
@@ -82,6 +84,11 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         let mediaBase64 = "";
         if (msg.mediaBuffer) {
             try {
+                // Check if buffer is GZIP'd (common in .tgs files)
+                if (msg.mediaBuffer.length > 2 && msg.mediaBuffer[0] === 0x1f && msg.mediaBuffer[1] === 0x8b) {
+                    throw new Error("Input buffer is GZIP'd (.tgs); needs static thumbnail instead.");
+                }
+
                 const mb = await sharp(msg.mediaBuffer)
                     .resize(1024, 1024, { fit: 'inside' })
                     .png()
@@ -154,9 +161,13 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             emoji_ids: [...new Set(allEmojiIds)]
         },
         transparent: finalOptions.transparent !== undefined ? finalOptions.transparent : true,
-        webp: finalOptions.webp !== undefined ? finalOptions.webp : true,
         messages: processedMessages
     };
+
+    // The native renderer always returns PNG; WEBP conversion happens locally below.
+    const wantWebp = finalOptions.format
+        ? finalOptions.format === 'webp'
+        : (finalOptions.webp !== false);
 
     // Force bypass proxy (fixes the SSL port HTTP misrouting since Quote API is functional without proxy)
     try {
@@ -168,8 +179,26 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             httpAgent: false,
             httpsAgent: false
         });
-        console.log(`✅ [QuoteAPI] Sticker generated successfully (${response.data.length} bytes)`);
-        return Buffer.from(response.data);
+        const png = Buffer.from(response.data);
+        console.log(`✅ [QuoteAPI] Sticker generated successfully (${png.length} bytes)`);
+
+        if (!wantWebp) return png;
+
+        // Telegram stickers must be WEBP — convert the renderer's PNG locally.
+        const isPng = png.length > 8 && png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4E && png[3] === 0x47;
+        const isWebp = png.length > 12 && png.toString('ascii', 0, 4) === 'RIFF' && png.toString('ascii', 8, 12) === 'WEBP';
+        if (!isPng && isWebp) return png;
+        try {
+            const webp = await sharp(png)
+                .resize({ width: 512, withoutEnlargement: true })
+                .webp({ lossless: true })
+                .toBuffer();
+            console.log(`✅ [QuoteAPI] Converted PNG -> WEBP (${png.length}B -> ${webp.length}B)`);
+            return webp;
+        } catch (convErr) {
+            console.error('[QuoteAPI] WEBP conversion failed, sending PNG:', convErr.message);
+            return png;
+        }
     } catch (err2) {
         const errorMsg2 = err2.response ? err2.response.data.toString() : err2.message;
         console.error('❌ [QuoteAPI] Error:', errorMsg2);

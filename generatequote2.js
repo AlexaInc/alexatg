@@ -6,6 +6,14 @@ const { createCanvas, registerFont } = require('canvas');
 const fs = require('fs');
 const path = require('path');
 
+// --- RENDERER CLIENT CONFIG DIAGNOSTIC (logged once at startup) ------------
+// Never logs token values — only whether authenticated requests will be used.
+(function () {
+    const hasToken = Boolean(process.env.QUOTE_HF_TOKEN || process.env.HFTOKEN || process.env.HF_TOKEN);
+    const chain = process.env.QUOTE_API_URL ? 'custom chain' : 'direct only';
+    console.log(`[QuoteAPI] renderer client: ${hasToken ? 'AUTHENTICATED (token env found)' : 'ANONYMOUS (no token env — set HFTOKEN to enable auth)'} | endpoints: ${chain}`);
+})();
+
 // --- DUMMY AVATAR LOGIC (Matches authentic Telegram style) ---
 const fontMap = {
     '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf': 'Noto Sans',
@@ -178,23 +186,22 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         ? finalOptions.format === 'webp'
         : (finalOptions.webp !== false);
 
-    // Anonymous request — same style as the working alexa-v3 client:
-    // plain JSON POST, proxy bypassed, no agent overrides.
-    // OPTIONAL: when a token env is set (QUOTE_HF_TOKEN or HFTOKEN), it is
-    // sent as a Bearer header. The render host only limits ANONYMOUS requests
-    // coming from inside its own cloud platform — an authenticated request
-    // passes normally, so this is the no-relay fix for same-platform
-    // deployments. Any access token works (read-only is enough).
-    const RENDER_TOKEN = process.env.QUOTE_HF_TOKEN || process.env.HFTOKEN || '';
+    // Renderer auth (optional): the render host applies strict limits only to
+    // ANONYMOUS requests coming from inside its own cloud platform — an
+    // authenticated request passes normally. Accepted env names (first found
+    // wins): QUOTE_HF_TOKEN, HFTOKEN, HF_TOKEN. Any access token works
+    // (read-only is enough). Without a token, requests stay anonymous
+    // (same as the alexa-v3 client).
+    let renderToken = process.env.QUOTE_HF_TOKEN || process.env.HFTOKEN || process.env.HF_TOKEN || '';
     // Each retry attempt rotates to the next configured endpoint.
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const MAX_ATTEMPTS = 4;
 
-    const render = (url) => axios.post(url, payload, {
+    const render = (url, withToken) => axios.post(url, payload, {
         responseType: 'arraybuffer',
         headers: {
             'Content-Type': 'application/json',
-            ...(RENDER_TOKEN ? { Authorization: `Bearer ${RENDER_TOKEN}` } : {})
+            ...(withToken && renderToken ? { Authorization: `Bearer ${renderToken}` } : {})
         },
         timeout: 30000,
         proxy: false
@@ -204,11 +211,19 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
         let response;
         for (let attempt = 1; ; attempt++) {
             const url = API_URLS[(attempt - 1) % API_URLS.length];
+            const usingToken = Boolean(renderToken);
             try {
-                response = await render(url);
+                response = await render(url, usingToken);
                 break;
             } catch (e) {
                 const status = e.response ? e.response.status : 0;
+                // A rejected token (401/403): drop it and retry anonymous —
+                // the token may be invalid/expired for this purpose.
+                if ((status === 401 || status === 403) && usingToken) {
+                    console.warn(`[QuoteAPI] HTTP ${status} with token — token not accepted, continuing without it`);
+                    renderToken = '';
+                    if (attempt < MAX_ATTEMPTS) { await sleep(800); continue; }
+                }
                 // No-response (network) errors are always worth a retry on the
                 // next endpoint; HTTP 4xx client errors (e.g. 400) fail fast.
                 const retryable = !status || status === 429 || status === 502 || status === 503 || status === 504;
@@ -216,7 +231,7 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
                 const ra = e.response && e.response.headers ? parseFloat(e.response.headers['retry-after']) : NaN;
                 const delay = (!isNaN(ra) && ra > 0) ? Math.min(ra * 1000, 20000) : Math.min(1500 * 2 ** (attempt - 1), 15000);
                 const next = API_URLS[attempt % API_URLS.length];
-                console.warn(`[QuoteAPI] ${status ? 'HTTP ' + status : e.code || 'network error'} from ${url} — retrying via ${next} in ${Math.round(delay)}ms (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
+                console.warn(`[QuoteAPI] HTTP ${status || e.code || 'network error'}${usingToken ? ' (authenticated)' : ' (anonymous)'} from ${url} — retrying via ${next} in ${Math.round(delay)}ms (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
                 await sleep(delay);
             }
         }
@@ -252,7 +267,9 @@ async function createImage(firstName, lastName, customemojiid, message, nameColo
             const detail = p ? p[1].replace(/\s+/g, ' ').trim() : (h1 ? h1[1].trim() : body.slice(0, 120));
             errorMsg2 = `HTTP ${status}: ${detail}`;
             if (status === 429) {
-                errorMsg2 += ' (temporary host limit — retrying in a moment usually clears it)';
+                errorMsg2 += renderToken
+                    ? ' (authenticated request was still limited — retry shortly, or set QUOTE_API_URL to a relay)'
+                    : ' (anonymous request was limited — set the HFTOKEN secret to authenticate, or use the relay option)';
             }
         }
         console.error('❌ [QuoteAPI] Error:', errorMsg2);

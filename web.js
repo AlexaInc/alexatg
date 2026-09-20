@@ -495,6 +495,8 @@ function sendJson(res, code, obj) {
   res.writeHead(code, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
+    // Allow the public website's status badge to read these endpoints
+    'Access-Control-Allow-Origin': '*',
   });
   res.end(body);
 }

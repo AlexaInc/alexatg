@@ -172,6 +172,18 @@ async function aiChat(params = {}) {
     return text;
   } catch (e) {
     console.error('[aii] ai.chat error:', e.message);
+    // Targeted hint for the most common misconfiguration: Supabase's direct
+    // db.<ref>.supabase.co hostnames are IPv6-only and unreachable from
+    // platforms without an IPv6 route — the pooler URL is the fix.
+    const m = String(e.message || '');
+    if (/ENOTFOUND|ENETUNREACH/.test(m) && /supabase\.co|supabase\.com/.test(m)) {
+      console.error(
+        '[aii] Hint: Supabase direct db.*.supabase.co hosts are IPv6-only and unreachable here. ' +
+        'Use the POOLER connection string (Supabase dashboard -> Connect -> Connection pooling), e.g. ' +
+        'postgresql://postgres.<project-ref>:<PASSWORD>@aws-0-<region>.pooler.supabase.com:5432/postgres ' +
+        '— set it as the POSTGRES_URL secret. Also check the project is not paused (free tier pauses after inactivity).'
+      );
+    }
     return '❌ The AI service encountered an error. Please try again later.';
   }
 }

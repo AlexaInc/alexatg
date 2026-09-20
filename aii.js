@@ -20,6 +20,26 @@
 
 const AlexaAI = require('alexa-ai');
 
+/**
+ * Force IPv4 DNS resolution for this process.
+ *
+ * Many container platforms have no IPv6 route at all. When a database host
+ * has both A and AAAA records, node prefers IPv6 — every connection then
+ * fails with ENETUNREACH (e.g. "Cannot connect to PostgreSQL: ENETUNREACH
+ * 2406:da12:...:5432"). Pinning DNS to IPv4 makes pg (and everything else)
+ * dial the A record. Disable with AI_FORCE_IPV4=false.
+ */
+if (String(process.env.AI_FORCE_IPV4 || 'true').toLowerCase() !== 'false') {
+  const dns = require('dns');
+  const origLookup = dns.lookup.bind(dns);
+  dns.lookup = (hostname, options, callback) => {
+    if (typeof options === 'function') { callback = options; options = {}; }
+    if (typeof options === 'number') options = { family: options };
+    options = Object.assign({}, options, { family: 4 });
+    return origLookup(hostname, options, callback);
+  };
+}
+
 /** Singleton engine — one PostgreSQL pool for the whole process. */
 let engine = null;
 let engineTried = false;
@@ -36,13 +56,39 @@ function getEngine() {
       console.error(`[aii] AI engine disabled: ${engineError}`);
       return null;
     }
+
+    // Keep the engine's DEFAULT persona (identity rules, triggers, memory
+    // tracking) and append a hard language rule — without it the free
+    // "standard" model sometimes answers in Chinese even for English input.
+    const defaultPrompt = (typeof AlexaAI.SYSTEM_PROMPT === 'string' && AlexaAI.SYSTEM_PROMPT.length > 0)
+      ? AlexaAI.SYSTEM_PROMPT
+      : '';
+    const languageRule = [
+      '',
+      'LANGUAGE RULE (highest priority):',
+      '- Always reply in the SAME language the user wrote in.',
+      '- If the message is in English, reply in English. If it is in Sinhala, reply in Sinhala.',
+      '- NEVER write Chinese, Japanese or Korean characters unless the user explicitly wrote in that language first.',
+      '- All punctuation, quotes and symbols must be standard Latin or the user\'s own script.',
+    ].join('\n');
+    const extraRules = process.env.AI_SYSTEM_PROMPT_EXTRA
+      ? `\n${process.env.AI_SYSTEM_PROMPT_EXTRA}\n`
+      : '';
+
     engine = new AlexaAI({
       key,
       postgresUrl,
       assistantName: process.env.AI_NAME || 'Alexa',
       creator: process.env.AI_CREATOR || 'Hansaka',
+      model: process.env.AI_MODEL || undefined,
+      fallbackModels: process.env.AI_FALLBACK_MODELS
+        ? process.env.AI_FALLBACK_MODELS.split(',').map(s => s.trim()).filter(Boolean)
+        : undefined,
+      systemPrompt: defaultPrompt
+        ? defaultPrompt + languageRule + extraRules
+        : undefined,
     });
-    console.log(`[aii] alexa-ai engine v${engine.version} initialised.`);
+    console.log(`[aii] alexa-ai engine v${engine.version} initialised (IPv4 DNS, language rule${process.env.AI_MODEL ? `, model: ${process.env.AI_MODEL}` : ''}).`);
   } catch (e) {
     engineError = e.message;
     console.error('[aii] Failed to initialise alexa-ai:', e.message);

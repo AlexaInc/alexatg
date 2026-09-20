@@ -255,6 +255,18 @@ async function aiChatEphemeral({ message } = {}) {
       knownFromOtherRooms: false,
     });
 
+    // Public-demo safety rule — appended to the LIVE user turn so it sits
+    // right next to the question (same reasoning as the language rule).
+    const SAFETY_RULE = [
+      '',
+      'SAFETY RULE (highest priority):',
+      '- Refuse to help with anything illegal or harmful: harassment, hate speech, threats, violence, self-harm instructions, malware, hacking, spam or scam tooling, doxxing, or sexual content involving minors.',
+      '- When refusing, reply with a short refusal only and, if possible, point to a safe alternative. Do not discuss the disallowed topic.',
+    ].join('\n');
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (lastUser) lastUser.content = `${lastUser.content}\n${SAFETY_RULE}`;
+    else messages.push({ role: 'user', content: SAFETY_RULE });
+
     const answer = await ai.deepai.chatDetailed(messages, {});
 
     let reply = String((answer && answer.text) || '').trim();

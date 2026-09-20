@@ -89,6 +89,42 @@ function getEngine() {
         : undefined,
     });
     console.log(`[aii] alexa-ai engine v${engine.version} initialised (IPv4 DNS, language rule${process.env.AI_MODEL ? `, model: ${process.env.AI_MODEL}` : ''}).`);
+
+    // Startup connectivity self-check (fire-and-forget, non-fatal): prints a
+    // precise verdict right after boot so a bad POSTGRES_URL is obvious
+    // immediately after a restart instead of only on the first message.
+    setTimeout(() => {
+      (async () => {
+        let client;
+        try {
+          const { Client } = require('pg');
+          client = new Client({ connectionString: postgresUrl, connectionTimeoutMillis: 10000 });
+          await client.connect();
+          await client.query('SELECT 1');
+          console.log('[aii] database check: CONNECTED ✓');
+        } catch (e) {
+          const msg = String((e && e.message) || e);
+          console.error('[aii] database check FAILED:', msg);
+          if (/password authentication failed/i.test(msg)) {
+            console.error(
+              '[aii] -> the database password is wrong. Fix: Supabase dashboard -> Settings -> Database -> ' +
+              'reset the database password (plain letters/digits are safest), then update the POSTGRES_URL secret ' +
+              'with it — NO square brackets, URL-encode special characters (@->%40, #->%23) — and RESTART this ' +
+              'service: changed secrets only apply after a restart.'
+            );
+          } else if (/ENOTFOUND|ENETUNREACH/i.test(msg)) {
+            console.error(
+              '[aii] -> database host unreachable. Use the Supabase POOLER connection string ' +
+              '(Connect -> Connection pooling -> Session mode) and check the project is not paused.'
+            );
+          } else if (/timeout|ETIMEDOUT/i.test(msg)) {
+            console.error('[aii] -> database connection timed out — check the project is not paused.');
+          }
+        } finally {
+          try { if (client) await client.end(); } catch (e2) { /* ignore */ }
+        }
+      })().catch(() => { /* never block startup */ });
+    }, 1500);
   } catch (e) {
     engineError = e.message;
     console.error('[aii] Failed to initialise alexa-ai:', e.message);

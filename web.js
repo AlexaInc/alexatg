@@ -12,7 +12,9 @@
  * The chat endpoint is safe to expose publicly:
  *   - the AI key never leaves this process (all engine calls are server-side)
  *   - per-IP hourly limit + global daily limit protect the shared quota
- *   - each browser session gets its own isolated conversation identity
+ *   - replies are generated STATELESSLY: no conversation row, no history,
+ *     no memory, no usage log — nothing is written to any database
+ *   - rate limits are in-memory only (reset on restart, never stored)
  *   - nothing sensitive is logged or rendered
  * Configure with env (all optional): WEB_CHAT_ENABLED, WEB_CHAT_HOURLY_LIMIT,
  * WEB_CHAT_DAILY_LIMIT, WEB_CHAT_MAX_LEN.
@@ -24,7 +26,7 @@ const PORT = process.env.PORT || 7860;
 const startedAt = Date.now();
 let requestsServed = 0;
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
 // ── Chat demo configuration ─────────────────────────────────────────────────
 const CHAT_ENABLED = String(process.env.WEB_CHAT_ENABLED || 'true').toLowerCase() !== 'false';
@@ -110,11 +112,11 @@ async function handleChat(req, res) {
   }
 
   const message = typeof body.message === 'string' ? body.message.trim() : '';
-  const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
 
   if (!message) return fail(400, 'Message is required.');
   if (message.length > CHAT_MAX_LEN) return fail(400, `Message too long (max ${CHAT_MAX_LEN} characters).`);
-  if (!/^[A-Za-z0-9_-]{8,64}$/.test(sessionId)) return fail(400, 'Invalid session id.');
+  // Note: a sessionId may be sent by browser clients for UX purposes, but the
+  // demo is fully stateless — there is no per-session history to key it to.
 
   // Engine configured? (aii lazily creates the engine; null means no keys)
   let aii;
@@ -131,17 +133,19 @@ async function handleChat(req, res) {
   if (!allowance.ok) return fail(429, allowance.reason);
 
   try {
-    // Anonymous web visitors get their own isolated identity per browser
-    // session — separate from any other users of the engine.
-    const reply = await aii.aiChat({
-      message,
-      userId: `web-${sessionId}`,
-      chatId: 0,
-      chatType: 'private',
-      userName: 'Web visitor',
-      messageId: `web-${sessionId}-${Date.now()}`,
-    });
-    return sendJson(res, 200, { reply, remaining: allowance.remaining });
+    // Stateless single-turn call: the reply is generated in one shot and
+    // NOTHING is written to any database — no history, no identity, no logs.
+    const out = await aii.aiChatEphemeral({ message });
+    if (out.error === 'not_configured') {
+      return fail(503, 'The AI demo is not configured on this deployment.');
+    }
+    if (out.error === 'quota') {
+      return fail(429, 'The AI demo has reached its usage limit for now — please try again later.');
+    }
+    if (out.error || !out.reply) {
+      return fail(500, 'The assistant could not answer right now — please try again.');
+    }
+    return sendJson(res, 200, { reply: out.reply, remaining: allowance.remaining });
   } catch (e) {
     console.error('[web] chat error:', e.message || e);
     return fail(500, 'The assistant could not answer right now — please try again.');
@@ -382,7 +386,7 @@ function renderPage() {
         <input id="chatin" maxlength="${CHAT_MAX_LEN}" placeholder="Ask anything…" autocomplete="off">
         <button id="sendbtn">Send</button>
       </div>
-      <div class="chat-note">Anonymous demo · limited to ${CHAT_HOURLY_LIMIT} messages/hour · responses are generated and may be inaccurate</div>
+      <div class="chat-note">Anonymous demo · nothing is stored · limited to ${CHAT_HOURLY_LIMIT} messages/hour · responses are generated and may be inaccurate</div>
     </div>
 
     <h2>API Endpoints</h2>
@@ -504,6 +508,19 @@ function sendJson(res, code, obj) {
 const server = http.createServer((req, res) => {
   requestsServed++;
   const url = (req.url || '/').split('?')[0];
+
+  // CORS preflight for browser clients: the public website's chat demo sends
+  // a JSON POST, which makes the browser ask for permission (OPTIONS) before
+  // the real request. Answer it once, cacheably, for any origin.
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '86400',
+    });
+    return res.end();
+  }
 
   if (url === '/api/chat') {
     if (req.method !== 'POST') return sendJson(res, 405, { status: 'error', error: 'method not allowed' });

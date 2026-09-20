@@ -225,6 +225,61 @@ async function aiChat(params = {}) {
 }
 
 /**
+ * Stateless, anonymous single-turn chat — used by the public web demo.
+ *
+ * Unlike aiChat() this NEVER touches the database: no conversation row, no
+ * message history, no memory rows, no usage log. The persona (including the
+ * language rule) is rebuilt from the engine config on every call and the
+ * reply is generated in one shot — nothing about the caller is persisted.
+ *
+ * @param {object} params
+ * @param {string} params.message the visitor's prompt
+ * @returns {Promise<{reply?:string, error?:string}>}
+ */
+async function aiChatEphemeral({ message } = {}) {
+  const ai = getEngine();
+  if (!ai) return { error: 'not_configured' };
+
+  const text = String(message || '').trim();
+  if (!text) return { error: 'empty' };
+
+  try {
+    const messages = ai.prompts.build({
+      message: text,
+      history: [],        // no thread history — fully stateless
+      memories: {},       // no memory lookups (and no memory writes)
+      userName: 'Web visitor',
+      isGroup: false,
+      groupName: null,
+      imageContext: null,
+      knownFromOtherRooms: false,
+    });
+
+    const answer = await ai.deepai.chatDetailed(messages, {});
+
+    let reply = String((answer && answer.text) || '').trim();
+    // Same cosmetic scrubbing the full pipeline applies — minus anything
+    // persistent. @MEMORY tags never carry facts here (no memories exist),
+    // but strip any the model volunteers anyway.
+    if (/@\s*MEMORY/i.test(reply)) {
+      reply = reply.replace(/@\s*MEMORY[^\n]*/gi, '').trim();
+    }
+    if (ai.identityGuard && typeof ai.identityGuard.sanitise === 'function') {
+      try { reply = ai.identityGuard.sanitise(reply, false); } catch (e) { /* cosmetic only */ }
+    }
+    if (!reply) return { error: 'empty_reply' };
+    return { reply };
+  } catch (e) {
+    const code = String((e && e.code) || '');
+    if (code === 'DEEPAI_QUOTA_EXCEEDED' || /quota/i.test(String((e && e.message) || ''))) {
+      return { error: 'quota' };
+    }
+    console.error('[aii] ephemeral chat error:', (e && e.message) || e);
+    return { error: 'engine' };
+  }
+}
+
+/**
  * Backwards-compatible signature: callToAi(prompt, uid)
  * where uid is either a chatId (DM) or `${chatId}@${userId}` (group).
  */
@@ -249,6 +304,7 @@ module.exports = callToAi;
 
 // ...plus the richer API and helpers
 module.exports.aiChat = aiChat;
+module.exports.aiChatEphemeral = aiChatEphemeral;
 module.exports.callToAi = callToAi;
 module.exports.getEngine = getEngine;
 module.exports.toUserJid = toUserJid;
